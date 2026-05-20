@@ -12,6 +12,12 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    // Check body size
+    const bodyStr = JSON.stringify(req.body);
+    if (bodyStr.length > 4000000) {
+      return res.status(413).json({ error: 'Image too large. Please use a smaller image.' });
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -19,7 +25,7 @@ module.exports = async function handler(req, res) {
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(req.body),
+      body: bodyStr,
     });
 
     const data = await response.json();
@@ -28,3 +34,4 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: error.message });
   }
 };
+
