@@ -42,7 +42,7 @@ function jparse(raw) {
 
 /* ─── AI ──────────────────────────────────────────────────── */
 async function callAI(msgs, search=false, maxTok=800) {
-  const body = { model:"claude-3-haiku-20240307", max_tokens:maxTok, messages:msgs };
+  const body = { model:"claude-opus-4-7", max_tokens:maxTok, messages:msgs };
   if (search) body.tools = [{type:"web_search_20250305",name:"web_search"}];
   const r = await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   if (!r.ok) { const e=await r.json().catch(()=>{}); throw new Error(e?.error?.message||`HTTP ${r.status}`); }
@@ -1366,3 +1366,4 @@ export default function CardGoal() {
     </div>
   );
 }
+
