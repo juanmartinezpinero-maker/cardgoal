@@ -1,29 +1,35 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-/* ─── DESIGN SYSTEM (MonPrice inspired) ─────────────────────
-   Clean, white, minimal. One accent color. No dark glass.
+/* ─── DESIGN SYSTEM — Matchapp Style ────────────────────────
+   Dark background, electric green accent, white text.
+   Bold typography. Clean and sporty.
 ──────────────────────────────────────────────────────────────── */
 const C = {
-  bg:      "#F5F6FA",      // app background
-  white:   "#FFFFFF",      // cards, panels
-  border:  "#E8EAF0",      // subtle borders
-  accent:  "#00C853",      // green — action color
-  accentL: "#E8F8EE",      // green light — badges, bg
-  accentD: "#009940",      // green dark — hover
-  blue:    "#2563EB",      // info
-  blueL:   "#EFF6FF",
-  red:     "#EF4444",
-  redL:    "#FEF2F2",
-  gold:    "#F59E0B",
-  goldL:   "#FFFBEB",
-  text:    "#111827",      // primary text
-  sub:     "#6B7280",      // secondary text
-  hint:    "#9CA3AF",      // placeholder
-  shadow:  "0 2px 12px rgba(0,0,0,0.08)",
-  shadowM: "0 4px 24px rgba(0,0,0,0.12)",
+  bg:      "#0D0F14",      // near black — main background
+  bg2:     "#13161E",      // slightly lighter dark
+  bg3:     "#1A1D26",      // card background
+  border:  "#252836",      // subtle dark border
+  borderL: "#2E3347",      // lighter border
+  accent:  "#00E676",      // electric green — Matchapp style
+  accentL: "rgba(0,230,118,0.12)",
+  accentD: "#00C853",
+  blue:    "#4A9EFF",
+  blueL:   "rgba(74,158,255,0.12)",
+  red:     "#FF5252",
+  redL:    "rgba(255,82,82,0.12)",
+  gold:    "#FFD740",
+  goldL:   "rgba(255,215,64,0.12)",
+  white:   "#FFFFFF",
+  text:    "#FFFFFF",
+  sub:     "#8B92A5",
+  hint:    "#555D72",
+  // Shadows
+  shadow:  "0 2px 12px rgba(0,0,0,0.4)",
+  shadowM: "0 8px 32px rgba(0,0,0,0.5)",
+  shadowL: "0 16px 64px rgba(0,0,0,0.6)",
 };
 const FD = "'Syne','Arial Black',sans-serif";
-const FB = "'DM Sans','Segoe UI',sans-serif";
+const FB = "'Inter','DM Sans','Segoe UI',sans-serif";
 
 /* ─── HELPERS ─────────────────────────────────────────────── */
 const eur = n => { const v=parseFloat(n); if(!isFinite(v)) return "—"; return new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v); };
@@ -620,9 +626,9 @@ function MiniChart({price,changeMonth}) {
 
 function LangBtn({lang,setLang}) {
   return (
-    <div style={{display:"flex",background:C.bg,borderRadius:20,padding:2,gap:1,border:`1px solid ${C.border}`}}>
+    <div style={{display:"flex",background:C.bg,borderRadius:12,padding:3,gap:2,border:`1px solid ${C.border}`}}>
       {["es","en"].map(l=>(
-        <button key={l} onClick={()=>setLang(l)} style={{padding:"4px 10px",borderRadius:18,border:"none",cursor:"pointer",fontFamily:FD,fontSize:10,fontWeight:700,background:lang===l?C.accent:"transparent",color:lang===l?"#fff":C.sub,transition:"all .15s"}}>
+        <button key={l} onClick={()=>setLang(l)} style={{padding:"5px 10px",borderRadius:9,border:"none",cursor:"pointer",fontFamily:FD,fontSize:10,fontWeight:700,background:lang===l?C.dark:"transparent",color:lang===l?"#fff":C.hint,transition:"all .2s",boxShadow:lang===l?`0 2px 6px ${C.dark}33`:"none"}}>
           {l==="es"?"🇪🇸":"🇬🇧"} {l.toUpperCase()}
         </button>
       ))}
@@ -696,7 +702,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
   const rs = RARITY_STYLE(card.rarity||"");
 
   return (
-    <div style={{position:"absolute",inset:0,zIndex:200,display:"flex",flexDirection:"column",overflow:"hidden",borderRadius:44,background:C.white}}>
+    <div style={{position:"absolute",inset:0,zIndex:200,display:"flex",flexDirection:"column",overflow:"hidden",background:C.white}}>
       {/* Handle bar */}
       <div style={{flexShrink:0,paddingTop:12,display:"flex",justifyContent:"center"}}>
         <div style={{width:40,height:4,background:C.border,borderRadius:2}}/>
@@ -704,7 +710,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
 
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 18px 12px",flexShrink:0}}>
-        <button onClick={onClose} style={{width:32,height:32,borderRadius:8,background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,color:C.sub}}>‹</button>
+        <button onClick={onClose} style={{width:32,height:32,borderRadius:8,background:C.bg2,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16,color:C.sub}}>‹</button>
         <div style={{flex:1}}>
           <div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text,lineHeight:1.1}}>{card.player}</div>
           <div style={{fontSize:12,color:C.sub,marginTop:2}}>{card.team}{card.season?` · ${card.season}`:""}</div>
@@ -752,7 +758,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
           </div>}
 
           {/* Chart */}
-          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
+          <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <span style={{fontSize:12,color:C.sub,fontWeight:600}}>{t.evo}</span>
               {mo!=null&&<span style={{fontSize:12,fontWeight:800,color:mo>=0?C.accent:C.red,fontFamily:FD}}>{mo>=0?"↑":"↓"}{Math.abs(mo)}%</span>}
@@ -765,7 +771,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
 
           {/* Market summary */}
           {(wk!=null||mo!=null)&&(
-            <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
+            <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
               <div style={{fontSize:12,color:C.sub,fontWeight:600,marginBottom:10}}>{t.summary}</div>
               <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:pb7&&p?10:0}}>
                 <ChangePill value={wk} label={t.lastWk}/>
@@ -779,7 +785,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
           )}
 
           {/* Details */}
-          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
+          <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
             <div style={{fontSize:12,color:C.sub,fontWeight:600,marginBottom:10}}>{t.details}</div>
             {[
               ["Jugador",card.player],["Equipo",card.team],["Temporada",card.season],
@@ -892,7 +898,7 @@ function GradeSheet({lang,setLang}) {
       </div>
       <div style={{padding:"0 18px 24px",display:"flex",flexDirection:"column",gap:12}}>
         {[["📐","Centrado/Centering","¿La imagen está centrada en los bordes?"],["🔲","Esquinas/Corners","¿Las 4 esquinas sin desgaste?"],["📏","Bordes/Edges","¿Bordes limpios sin muescas?"],["✨","Superficie/Surface","¿Sin arañazos ni manchas?"]].map(([ic,k,v])=>(
-          <div key={k} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",display:"flex",gap:12,alignItems:"center",boxShadow:C.shadow}}>
+          <div key={k} style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",display:"flex",gap:12,alignItems:"center",boxShadow:C.shadow}}>
             <span style={{fontSize:24,flexShrink:0}}>{ic}</span>
             <div><div style={{fontSize:13,fontWeight:700,color:C.text}}>{k}</div><div style={{fontSize:12,color:C.sub,marginTop:2}}>{v}</div></div>
           </div>
@@ -901,7 +907,7 @@ function GradeSheet({lang,setLang}) {
         <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:"16px",background:C.gold,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginTop:4}}>
           {T.btn}
         </button>
-        <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}} style={{width:"100%",padding:"13px",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:14,fontWeight:700,color:C.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+        <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}} style={{width:"100%",padding:"13px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:14,fontWeight:700,color:C.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
           🖼️ {T.upload}
         </button>
       </div>
@@ -940,7 +946,7 @@ function GradeSheet({lang,setLang}) {
           </div>
         </div>
 
-        <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
+        <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
           <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>{T.breakdown}</div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <Gauge score={res.centering} label={T.centering}/>
@@ -950,7 +956,7 @@ function GradeSheet({lang,setLang}) {
           </div>
         </div>
 
-        <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
+        <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
           <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>{T.detail}</div>
           {[[T.centering,res.centeringDetail],[T.corners,res.cornersDetail],[T.edges,res.edgesDetail],[T.surface,res.surfaceDetail]].filter(([,v])=>v).map(([k,v])=>(
             <div key={k} style={{marginBottom:10,paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
@@ -961,7 +967,7 @@ function GradeSheet({lang,setLang}) {
           {res.mainIssue&&<div style={{background:C.redL,border:`1px solid ${C.red}44`,borderRadius:10,padding:"10px"}}><div style={{fontSize:11,fontWeight:700,color:C.red,marginBottom:3}}>{T.factor}</div><div style={{fontSize:12,color:C.sub}}>{res.mainIssue}</div></div>}
         </div>
 
-        {(res.rawValue||res.gradedValue)&&<div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
+        {(res.rawValue||res.gradedValue)&&<div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:C.shadow}}>
           <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>{T.value}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div style={{background:C.bg,borderRadius:12,padding:"12px",textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:11,color:C.sub,marginBottom:4}}>{T.raw}</div><div style={{fontFamily:FD,fontSize:18,fontWeight:800,color:C.text}}>{eur(res.rawValue)}</div></div>
@@ -989,57 +995,110 @@ function Home({col, nav, lang}) {
   const isES = lang==="es";
 
   return (
-    <div style={{flex:1,overflowY:"auto",background:C.bg}}>
-      {/* Portfolio banner */}
-      <div style={{margin:"16px 16px 0",background:C.accent,borderRadius:20,padding:"20px",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",right:-20,top:-20,width:110,height:110,borderRadius:"50%",background:"rgba(255,255,255,0.1)"}}/>
-        <div style={{position:"absolute",right:30,bottom:-30,width:70,height:70,borderRadius:"50%",background:"rgba(255,255,255,0.06)"}}/>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:600}}>{isES?"Valor total":"Total value"}</div>
-        <div style={{fontFamily:FD,fontSize:36,fontWeight:800,color:"#fff",lineHeight:1,margin:"5px 0 4px"}}>{eur(total)}</div>
-        <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",marginBottom:14}}>{col.length===0?(isES?"Añade tu primera carta":"Add your first card"):(isES?"Actualizado automáticamente":"Updated automatically")}</div>
-        <div style={{display:"flex",gap:20}}>
-          {[[col.length,isES?"cartas":"cards"],[raras,isES?"raras":"rare"],[col.filter(c=>c.scanned).length,isES?"escaneadas":"scanned"]].map(([n,l])=>(
-            <div key={l}><div style={{fontFamily:FD,fontSize:18,fontWeight:800,color:"#fff"}}>{n}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.65)"}}>{l}</div></div>
+    <div style={{flex:1,overflowY:"auto",background:C.bg,paddingBottom:24,color:C.text}}>
+
+      {/* Hero portfolio card — dark premium */}
+      <div style={{margin:"20px 16px 0",background:`linear-gradient(135deg,#1A2035 0%,#0D1525 100%)`,borderRadius:24,padding:"28px 24px",position:"relative",overflow:"hidden",boxShadow:C.shadowL}}>
+        {/* Decorative circles */}
+        <div style={{position:"absolute",right:-40,top:-40,width:180,height:180,borderRadius:"50%",background:"rgba(5,193,104,0.08)"}}/>
+        <div style={{position:"absolute",right:20,bottom:-50,width:120,height:120,borderRadius:"50%",background:"rgba(5,193,104,0.05)"}}/>
+        <div style={{position:"absolute",left:-20,bottom:-20,width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.03)"}}/>
+
+        {/* Label */}
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.12em",fontWeight:600,marginBottom:8}}>{isES?"Valor total del portfolio":"Total portfolio value"}</div>
+
+        {/* Amount */}
+        <div style={{fontFamily:FD,fontSize:42,fontWeight:800,color:"#fff",lineHeight:1,letterSpacing:"-0.02em"}}>{eur(total)}</div>
+
+        {/* Status */}
+        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8,marginBottom:20}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:C.accent}}/>
+          <span style={{fontSize:12,color:"rgba(255,255,255,0.45)"}}>
+            {col.length===0?(isES?"Sin cartas aún":"No cards yet"):(isES?"Sincronizado ahora":"Synced now")}
+          </span>
+        </div>
+
+        {/* Stats row */}
+        <div style={{display:"flex",gap:0,borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:16}}>
+          {[[col.length,isES?"Cartas":"Cards"],[raras,isES?"Raras":"Rare"],[col.filter(c=>c.scanned).length,isES?"Escaneadas":"Scanned"]].map(([n,l],i,arr)=>(
+            <div key={l} style={{flex:1,textAlign:"center",borderRight:i<arr.length-1?"1px solid rgba(255,255,255,0.08)":"none"}}>
+              <div style={{fontFamily:FD,fontSize:22,fontWeight:800,color:"#fff"}}>{n}</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2,textTransform:"uppercase",letterSpacing:"0.06em"}}>{l}</div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:"12px 16px 0"}}>
-        <button onClick={()=>nav("search")} style={{padding:"14px",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:16,fontFamily:FD,fontSize:13,fontWeight:700,color:C.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:C.shadow}}>
-          🔍 {isES?"Buscar":"Search"}
-        </button>
-        <button onClick={()=>nav("scanner")} style={{padding:"14px",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:16,fontFamily:FD,fontSize:13,fontWeight:700,color:C.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:C.shadow}}>
-          📷 {isES?"Escanear":"Scan"}
+      {/* Quick actions */}
+      <div style={{padding:"16px 16px 0"}}>
+        <div style={{fontSize:11,color:C.hint,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600,marginBottom:10}}>{isES?"Acciones rápidas":"Quick actions"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <button onClick={()=>nav("search")} style={{padding:"16px 12px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,boxShadow:C.shadow,transition:"transform .15s,box-shadow .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=C.shadowM;}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.shadow;}}>
+            <div style={{width:36,height:36,borderRadius:10,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🔍</div>
+            <div style={{fontFamily:FD,fontSize:13,fontWeight:700,color:C.text}}>{isES?"Buscar carta":"Search card"}</div>
+            <div style={{fontSize:11,color:C.hint}}>{isES?"Precio en tiempo real":"Real-time price"}</div>
+          </button>
+          <button onClick={()=>nav("scanner")} style={{padding:"16px 12px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,boxShadow:C.shadow,transition:"transform .15s,box-shadow .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=C.shadowM;}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.shadow;}}>
+            <div style={{width:36,height:36,borderRadius:10,background:"#EEF3FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📷</div>
+            <div style={{fontFamily:FD,fontSize:13,fontWeight:700,color:C.text}}>{isES?"Escanear carta":"Scan card"}</div>
+            <div style={{fontSize:11,color:C.hint}}>{isES?"IA en segundos":"AI in seconds"}</div>
+          </button>
+        </div>
+        <button onClick={()=>nav("grading")} style={{width:"100%",padding:"16px",background:`linear-gradient(135deg,${C.goldL},#FFF3DC)`,border:`1px solid ${C.gold}44`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:C.shadow,transition:"transform .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+          onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
+          <div style={{width:40,height:40,borderRadius:12,background:`linear-gradient(135deg,${C.gold},#F0901A)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,boxShadow:`0 4px 12px ${C.gold}44`,flexShrink:0}}>🔬</div>
+          <div style={{textAlign:"left"}}>
+            <div style={{fontFamily:FD,fontSize:14,fontWeight:700,color:C.text}}>{isES?"Análisis de Grado PSA":"PSA Grade Analysis"}</div>
+            <div style={{fontSize:11,color:C.sub,marginTop:2}}>{isES?"IA como grader profesional":"AI like a professional grader"}</div>
+          </div>
+          <div style={{marginLeft:"auto",fontSize:18,color:C.gold,flexShrink:0}}>›</div>
         </button>
       </div>
-      <button onClick={()=>nav("grading")} style={{margin:"10px 16px 0",width:"calc(100% - 32px)",padding:"13px",background:C.white,border:`1.5px solid ${C.gold}`,borderRadius:16,fontFamily:FD,fontSize:13,fontWeight:700,color:C.gold,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:C.shadow}}>
-        🔬 {isES?"Analizar grado PSA":"Analyze PSA grade"}
-      </button>
 
       {/* Recent cards */}
       {col.length>0&&<>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px 10px"}}>
-          <span style={{fontSize:13,fontWeight:700,color:C.text}}>{isES?"Recientes":"Recent"}</span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 18px 10px"}}>
+          <span style={{fontFamily:FD,fontSize:14,fontWeight:700,color:C.text}}>{isES?"Añadidas recientemente":"Recently added"}</span>
           <span onClick={()=>nav("collection")} style={{fontSize:12,color:C.accent,fontWeight:600,cursor:"pointer"}}>{isES?"Ver todo →":"See all →"}</span>
         </div>
         <div style={{padding:"0 16px",display:"flex",flexDirection:"column",gap:8}}>
           {col.slice(-3).reverse().map((card,i)=>(
-            <div key={card._uid||i} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:12,boxShadow:C.shadow,cursor:"pointer"}} onClick={()=>nav("collection")}>
+            <div key={card._uid||i}
+              style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px",display:"flex",alignItems:"center",gap:12,boxShadow:C.shadow,cursor:"pointer",transition:"transform .1s,box-shadow .1s"}}
+              onClick={()=>nav("collection")}
+              onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.shadowM;}}
+              onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.shadow;}}>
               <CardViz card={card} photo={card._thumb||null} sz="sm"/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{card.player}</div>
-                <div style={{fontSize:11,color:C.sub,marginTop:2}}>{card.collection||card.manufacturer} · {card.rarity||"Base"}</div>
+                <div style={{fontSize:11,color:C.sub,marginTop:3}}>{card.collection||card.manufacturer} · <span style={{color:card.rarity&&card.rarity!=="Base"?C.gold:C.hint}}>{card.rarity||"Base"}</span></div>
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
-                <div style={{fontFamily:FD,fontSize:14,fontWeight:800,color:C.text}}>{eur(num(card.priceEur)||num(card.price))}</div>
-                {num(card.changeWeek)!=null&&<div style={{fontSize:10,fontWeight:700,color:card.changeWeek>=0?C.accent:C.red,marginTop:2}}>{card.changeWeek>=0?"↑":"↓"}{Math.abs(card.changeWeek)}%</div>}
+                <div style={{fontFamily:FD,fontSize:15,fontWeight:800,color:C.text}}>{eur(num(card.priceEur)||num(card.price))}</div>
+                {num(card.changeWeek)!=null&&(
+                  <div style={{fontSize:10,fontWeight:700,color:card.changeWeek>=0?C.accent:C.red,marginTop:3,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:2}}>
+                    <span>{card.changeWeek>=0?"↑":"↓"}</span><span>{Math.abs(card.changeWeek)}%</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
       </>}
-      <div style={{height:20}}/>
+
+      {/* Empty state */}
+      {col.length===0&&(
+        <div style={{padding:"32px 24px",textAlign:"center"}}>
+          <div style={{width:72,height:72,borderRadius:20,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px"}}>⚽</div>
+          <div style={{fontFamily:FD,fontSize:18,fontWeight:800,color:C.text,marginBottom:8}}>{isES?"Empieza tu colección":"Start your collection"}</div>
+          <div style={{fontSize:13,color:C.sub,lineHeight:1.7}}>{isES?"Busca o escanea tu primera carta para ver su valor de mercado.":"Search or scan your first card to see its market value."}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1066,12 +1125,12 @@ function Search({onAdd, addedIds, onTap, lang}) {
   const CHIPS = ["Yamal 2024","Bellingham Prizm","Mbappé Chrome","Pedri Adrenalyn","Haaland auto","Vinicius /25","Messi Topps","Ronaldo Panini"];
 
   return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",background:C.bg,overflow:"hidden"}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",background:C.bg,overflow:"hidden",color:C.text}}>
       {/* Search bar */}
       <div style={{padding:"12px 16px 10px",background:C.white,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
         <div style={{fontSize:18,fontFamily:FD,fontWeight:800,color:C.text,marginBottom:10}}>{isES?"Buscar carta":"Search card"}</div>
         <div style={{display:"flex",gap:8}}>
-          <div style={{flex:1,display:"flex",alignItems:"center",gap:8,background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"0 12px",transition:"border-color .15s"}}>
+          <div style={{flex:1,display:"flex",alignItems:"center",gap:8,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:"0 12px",transition:"border-color .15s"}}>
             <span style={{fontSize:16,flexShrink:0,color:C.hint}}>🔍</span>
             <input ref={ref} value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
               placeholder={isES?"Jugador, colección, rareza…":"Player, collection, rarity…"}
@@ -1112,7 +1171,7 @@ function Search({onAdd, addedIds, onTap, lang}) {
         {st==="done"&&cards.map(card=>{
           const isAdded=addedIds.has(card._uid);
           return(
-            <div key={card._uid} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:18,overflow:"hidden",marginBottom:14,boxShadow:C.shadow}}>
+            <div key={card._uid} style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,overflow:"hidden",marginBottom:14,boxShadow:C.shadow}}>
               {/* Card visual */}
               <div onClick={()=>onTap({...card})} style={{display:"flex",justifyContent:"center",padding:"20px 16px 14px",background:`linear-gradient(180deg,${C.bg},${C.white})`,cursor:"pointer"}}>
                 <CardViz card={card} sz="xl"/>
@@ -1178,7 +1237,7 @@ function Scanner({onAdd, lang}) {
       <button onClick={()=>fileRef.current?.click()} style={{width:"100%",maxWidth:280,padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
         📷 {isES?"Usar cámara":"Use camera"}
       </button>
-      <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}} style={{width:"100%",maxWidth:280,padding:"13px",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:16,fontFamily:FD,fontSize:14,fontWeight:700,color:C.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:C.shadow}}>
+      <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}} style={{width:"100%",maxWidth:280,padding:"13px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,fontFamily:FD,fontSize:14,fontWeight:700,color:C.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:C.shadow}}>
         🖼️ {isES?"Subir imagen":"Upload image"}
       </button>
     </div>
@@ -1207,7 +1266,7 @@ function Scanner({onAdd, lang}) {
     const p=num(price?.priceEur);
     const doAdd=()=>{if(added)return;onAdd({...card,...(price||{}),priceEur:p??null,price:p??null,scanned:true,_thumb:durl,_uid:`scan_${Date.now()}`});setAdded(true);};
     return(
-      <div style={{flex:1,overflowY:"auto",background:C.bg}}>
+      <div style={{flex:1,overflowY:"auto",background:C.bg,color:C.text}}>
         <div style={{background:C.white,padding:"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
           <CardViz card={card} photo={durl} sz="xl"/>
           <div style={{textAlign:"center"}}>
@@ -1222,7 +1281,7 @@ function Scanner({onAdd, lang}) {
         </div>
         <div style={{padding:"16px"}}>
           {p!=null?<>
-            <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,boxShadow:C.shadow}}>
+            <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,boxShadow:C.shadow}}>
               <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{isES?"Precio de mercado":"Market price"}</div>
               <div style={{fontFamily:FD,fontSize:32,fontWeight:800,color:C.text,margin:"4px 0"}}>{eur(p)}</div>
               {price?.priceSource&&<div style={{fontSize:10,color:C.accent,fontWeight:600}}>📊 {price.priceSource}</div>}
@@ -1232,7 +1291,7 @@ function Scanner({onAdd, lang}) {
               <PriceTag value={p} label={isES?"Medio":"Average"} highlight/>
               <PriceTag value={price.pricePrem} label={isES?"Premium":"Premium"}/>
             </div>}
-          </>:<div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,textAlign:"center",boxShadow:C.shadow}}>
+          </>:<div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,textAlign:"center",boxShadow:C.shadow}}>
             <div style={{fontSize:13,color:C.sub}}>{isES?"No encontré precio de mercado.":"No market price found."}</div>
           </div>}
           <button onClick={doAdd} disabled={added} style={{width:"100%",padding:"15px",background:added?C.accentL:C.accent,border:added?`1.5px solid ${C.accent}`:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:added?C.accent:"#fff",cursor:added?"default":"pointer",transition:"all .2s",marginBottom:10,boxShadow:added?"none":`0 4px 14px ${C.accent}44`}}>
@@ -1296,7 +1355,7 @@ function Collection({col, nav, onTap, lang}) {
             const wk=num(card.changeWeek);
             return(
               <div key={card._uid||i} onClick={()=>onTap({...card})}
-                style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:16,overflow:"hidden",cursor:"pointer",boxShadow:C.shadow,transition:"box-shadow .15s,transform .1s"}}
+                style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,overflow:"hidden",cursor:"pointer",boxShadow:C.shadow,transition:"box-shadow .15s,transform .1s"}}
                 onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.shadowM;e.currentTarget.style.transform="scale(1.02)";}}
                 onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.shadow;e.currentTarget.style.transform="scale(1)";}}>
                 <div style={{display:"flex",justifyContent:"center",padding:"12px 10px 8px",background:`linear-gradient(180deg,${C.bg},${C.white})`}}>
@@ -1369,73 +1428,67 @@ export default function CardGoal() {
   ];
 
   return (
-    <div style={{fontFamily:FB,background:"#E8EBF5",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+    <div style={{fontFamily:FB,background:C.bg,minHeight:"100vh",display:"flex",flexDirection:"column",color:C.text}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
         * { box-sizing:border-box; }
         ::-webkit-scrollbar { display:none; }
-        input::placeholder { color:${C.hint}; }
+        input::placeholder { color:rgba(255,255,255,0.6); background:{C.bg2}; }
+        body { margin:0; padding:0; }
       `}</style>
 
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14}}>
-        {/* Top bar */}
-        <div style={{width:"100%",maxWidth:345,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      {/* Top header bar — premium */}
+      <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${C.dark},${C.dark2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:`0 2px 8px ${C.dark}33`}}>⚽</div>
           <div>
-            <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>CardGoal ⚽</div>
-            {col.length>0&&<div style={{fontSize:11,color:C.sub,marginTop:1}}>{eur(total)} · {col.length} {isES?"cartas":"cards"}</div>}
+            <div style={{fontFamily:FD,fontSize:17,fontWeight:800,color:C.text,letterSpacing:"-0.01em",lineHeight:1}}>CardGoal</div>
+            <div style={{fontSize:10,color:C.hint,marginTop:2,letterSpacing:"0.04em"}}>{isES?"Tu portfolio de cromos":"Your card portfolio"}</div>
           </div>
-          <LangBtn lang={lang} setLang={setLang}/>
+        </div>
+        <LangBtn lang={lang} setLang={setLang}/>
+      </div>
+
+      {/* Main content — full width */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.white,minHeight:"calc(100vh - 120px)"}}>
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
+          {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang}/>}
+          {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
+          {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang}/>}
+          {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
+          {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang}/>}
         </div>
 
-        {/* Phone frame — clean white */}
-        <div style={{
-          width:345, height:700,
-          background:C.bg,
-          borderRadius:44,
-          border:"2px solid rgba(0,0,0,0.08)",
-          overflow:"hidden",
-          display:"flex",
-          flexDirection:"column",
-          boxShadow:"0 0 0 6px rgba(255,255,255,0.8),0 20px 60px rgba(0,0,0,0.15)",
-          position:"relative",
-        }}>
-          {/* Notch */}
-          <div style={{width:90,height:6,background:"rgba(0,0,0,0.12)",borderRadius:3,margin:"10px auto 0",flexShrink:0}}/>
-          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 22px 4px",fontSize:11,color:C.hint,flexShrink:0}}>
-            <span style={{fontWeight:600}}>9:41</span><span>●●● 100%</span>
-          </div>
+        {/* CARD DETAIL SHEET */}
+        {modal&&<div style={{position:"fixed",inset:0,zIndex:300,background:C.white,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto",left:"50%",transform:"translateX(-50%)",width:"100%"}}>
+          <CardSheet card={modal} onClose={()=>setModal(null)} onAdd={addCard} isAdded={addedIds.has(modal._uid)} onAddAlert={addAlert} lang={lang}/>
+        </div>}
+      </div>
 
-          {/* Screens */}
-          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
-            {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang}/>}
-            {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
-            {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang}/>}
-            {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
-            {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang}/>}
-          </div>
-
-          {/* Nav bar — clean white */}
-          <div style={{display:"flex",background:C.white,borderTop:`1px solid ${C.border}`,padding:"8px 0 10px",flexShrink:0}}>
-            {NAV.map(item=>{
-              const active=screen===item.id;
-              return(
-                <button key={item.id} onClick={()=>{setModal(null);setScreen(item.id);}}
-                  style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0",position:"relative",transition:"opacity .15s"}}>
-                  <span style={{fontSize:16,opacity:active?1:0.4}}>{item.i}</span>
-                  <span style={{fontSize:9,fontWeight:700,color:active?(item.id==="grading"?C.gold:C.accent):C.hint,letterSpacing:"0.02em"}}>{item.l}</span>
-                  {active&&<div style={{width:18,height:2.5,background:item.id==="grading"?C.gold:C.accent,borderRadius:2,marginTop:1}}/>}
-                  {item.id==="collection"&&col.length>0&&(
-                    <div style={{position:"absolute",top:0,right:"calc(50% - 20px)",minWidth:15,height:15,background:C.accent,borderRadius:8,fontSize:8,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{col.length}</div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* CARD DETAIL SHEET — slides over everything */}
-          {modal&&<CardSheet card={modal} onClose={()=>setModal(null)} onAdd={addCard} isAdded={addedIds.has(modal._uid)} onAddAlert={addAlert} lang={lang}/>}
+      {/* Bottom nav bar — premium */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(13,15,20,0.97)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",borderTop:`1px solid ${C.border}`,display:"flex",zIndex:200,boxShadow:"0 -1px 0 rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",width:"100%",maxWidth:600,margin:"0 auto",padding:"6px 0 8px"}}>
+          {NAV.map(item=>{
+            const active=screen===item.id;
+            const activeColor=item.id==="grading"?C.gold:C.accent;
+            return(
+              <button key={item.id} onClick={()=>{setModal(null);setScreen(item.id);}}
+                style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"6px 0",position:"relative",transition:"all .15s"}}>
+                {/* Active background pill */}
+                {active&&<div style={{position:"absolute",top:4,left:"50%",transform:"translateX(-50%)",width:40,height:28,borderRadius:10,background:item.id==="grading"?"rgba(255,215,64,0.15)":"rgba(0,230,118,0.15)"}}/>}
+                <span style={{fontSize:18,position:"relative",zIndex:1,opacity:active?1:0.4,transition:"all .15s"}}>{item.i}</span>
+                <span style={{fontSize:9,fontWeight:active?700:500,color:active?activeColor:C.hint,letterSpacing:"0.02em",transition:"color .15s"}}>{item.l}</span>
+                {item.id==="collection"&&col.length>0&&(
+                  <div style={{position:"absolute",top:2,right:"calc(50% - 22px)",minWidth:16,height:16,background:C.accent,borderRadius:8,fontSize:8,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",boxShadow:`0 2px 6px ${C.accent}66`}}>{col.length}</div>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      {/* Bottom padding so content doesn't hide under nav */}
+      <div style={{height:70}}/>
     </div>
   );
 }
