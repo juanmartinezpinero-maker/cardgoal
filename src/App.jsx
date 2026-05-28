@@ -31,6 +31,75 @@ const C = {
 const FD = "'Syne','Arial Black',sans-serif";
 const FB = "'Inter','DM Sans','Segoe UI',sans-serif";
 
+/* ─── SUPABASE ────────────────────────────────────────────── */
+const SUPA_URL = "https://pmdeezqpaphdmlnbjczg.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtZGVlenFwYXBoZG1sbmJqY3pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5ODg2MjEsImV4cCI6MjA5NTU2NDYyMX0.wNLPCwqTZkR4HJ_BexPNOHtxaokoGNQTubFGrRMeOuo";
+
+const supa = {
+  headers: { "Content-Type":"application/json", "apikey":SUPA_KEY, "Authorization":`Bearer ${SUPA_KEY}` },
+
+  async signUp(email, password) {
+    const r = await fetch(`${SUPA_URL}/auth/v1/signup`, {
+      method:"POST", headers:this.headers,
+      body: JSON.stringify({email, password})
+    });
+    return r.json();
+  },
+
+  async signIn(email, password) {
+    const r = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+      method:"POST", headers:this.headers,
+      body: JSON.stringify({email, password})
+    });
+    return r.json();
+  },
+
+  async signOut(token) {
+    await fetch(`${SUPA_URL}/auth/v1/logout`, {
+      method:"POST",
+      headers:{...this.headers, "Authorization":`Bearer ${token}`}
+    });
+  },
+
+  async getUser(token) {
+    const r = await fetch(`${SUPA_URL}/auth/v1/user`, {
+      headers:{...this.headers, "Authorization":`Bearer ${token}`}
+    });
+    return r.json();
+  },
+
+  async saveCard(card, token) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/collections`, {
+      method:"POST",
+      headers:{...this.headers, "Authorization":`Bearer ${token}`, "Prefer":"return=representation"},
+      body: JSON.stringify({
+        player: card.player, team: card.team, season: card.season,
+        manufacturer: card.manufacturer, collection: card.collection,
+        card_number: card.cardNumber, rarity: card.rarity,
+        condition: card.condition, price_eur: card.priceEur,
+        price_min: card.priceMin, price_prem: card.pricePrem,
+        price_source: card.priceSource, change_week: card.changeWeek,
+        change_month: card.changeMonth, scanned: card.scanned||false,
+      })
+    });
+    return r.json();
+  },
+
+  async loadCards(token) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/collections?select=*&order=created_at.desc`, {
+      headers:{...this.headers, "Authorization":`Bearer ${token}`}
+    });
+    return r.json();
+  },
+
+  async deleteCard(id, token) {
+    await fetch(`${SUPA_URL}/rest/v1/collections?id=eq.${id}`, {
+      method:"DELETE",
+      headers:{...this.headers, "Authorization":`Bearer ${token}`}
+    });
+  }
+};
+
 /* ─── HELPERS ─────────────────────────────────────────────── */
 const eur = n => { const v=parseFloat(n); if(!isFinite(v)) return "—"; return new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v); };
 const num = v => { const n=parseFloat(v); return isFinite(n)?n:null; };
@@ -989,6 +1058,90 @@ function GradeSheet({lang,setLang}) {
 ═══════════════════════════════════════════════════════════ */
 
 /* HOME */
+/* ═══════════════════════════════════════════════════════════
+   AUTH SCREEN — Login / Register
+═══════════════════════════════════════════════════════════ */
+function AuthScreen({onAuth, lang}) {
+  const [mode,setMode]   = useState("login"); // login | register
+  const [email,setEmail] = useState("");
+  const [pass,setPass]   = useState("");
+  const [err,setErr]     = useState("");
+  const [loading,setLoading] = useState(false);
+  const isES = lang==="es";
+
+  const handle = async () => {
+    if(!email.trim()||!pass.trim()) return;
+    setLoading(true); setErr("");
+    try {
+      let res;
+      if(mode==="register") {
+        res = await supa.signUp(email.trim(), pass);
+        if(res.error) { setErr(res.error.message||"Error al registrarse"); setLoading(false); return; }
+        // Auto login after register
+        res = await supa.signIn(email.trim(), pass);
+      } else {
+        res = await supa.signIn(email.trim(), pass);
+      }
+      if(res.error) { setErr(isES?"Email o contraseña incorrectos":"Wrong email or password"); setLoading(false); return; }
+      if(res.access_token) {
+        onAuth({token: res.access_token, email: res.user?.email||email, id: res.user?.id});
+      }
+    } catch(e) { setErr(e.message||"Error"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",background:C.bg}}>
+      {/* Logo */}
+      <div style={{textAlign:"center",marginBottom:40}}>
+        <div style={{width:72,height:72,borderRadius:20,background:`linear-gradient(135deg,${C.bg3},${C.bg2})`,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px",boxShadow:C.shadowM}}>⚽</div>
+        <div style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.white,letterSpacing:"-0.02em"}}>CardGoal</div>
+        <div style={{fontSize:13,color:C.sub,marginTop:6}}>{isES?"Tu portfolio de cromos de fútbol":"Your football card portfolio"}</div>
+      </div>
+
+      {/* Toggle */}
+      <div style={{display:"flex",background:C.bg3,borderRadius:14,padding:4,gap:4,marginBottom:24,width:"100%",maxWidth:320}}>
+        {[["login",isES?"Entrar":"Sign in"],["register",isES?"Registrarse":"Sign up"]].map(([m,l])=>(
+          <button key={m} onClick={()=>{setMode(m);setErr("");}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:FD,fontSize:13,fontWeight:700,background:mode===m?C.accent:"transparent",color:mode===m?C.bg:C.sub,transition:"all .2s"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Form */}
+      <div style={{width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:12}}>
+        <input
+          type="email" placeholder={isES?"tu@email.com":"your@email.com"}
+          value={email} onChange={e=>setEmail(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&handle()}
+          style={{width:"100%",padding:"14px 16px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,fontSize:14,color:C.white,outline:"none",fontFamily:FB,boxSizing:"border-box"}}
+        />
+        <input
+          type="password" placeholder={isES?"Contraseña":"Password"}
+          value={pass} onChange={e=>setPass(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&handle()}
+          style={{width:"100%",padding:"14px 16px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,fontSize:14,color:C.white,outline:"none",fontFamily:FB,boxSizing:"border-box"}}
+        />
+
+        {err&&<div style={{background:"rgba(255,82,82,0.12)",border:`1px solid ${C.red}44`,borderRadius:10,padding:"10px 14px",fontSize:12,color:C.red}}>{err}</div>}
+
+        <button onClick={handle} disabled={loading||!email.trim()||!pass.trim()} style={{width:"100%",padding:"15px",background:email.trim()&&pass.trim()?C.accent:C.bg3,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:email.trim()&&pass.trim()?C.bg:C.hint,cursor:email.trim()&&pass.trim()?"pointer":"default",transition:"all .2s",marginTop:4}}>
+          {loading?"...":(mode==="login"?(isES?"Entrar →":"Sign in →"):(isES?"Crear cuenta →":"Create account →"))}
+        </button>
+
+        {mode==="login"&&<div style={{textAlign:"center",fontSize:12,color:C.sub,marginTop:4}}>
+          {isES?"¿No tienes cuenta? ":"No account? "}
+          <span onClick={()=>setMode("register")} style={{color:C.accent,cursor:"pointer",fontWeight:600}}>{isES?"Regístrate":"Sign up"}</span>
+        </div>}
+      </div>
+
+      <div style={{marginTop:32,fontSize:11,color:C.hint,textAlign:"center",maxWidth:280,lineHeight:1.6}}>
+        {isES?"Al registrarte aceptas nuestros términos. Tu colección se guarda de forma segura en la nube.":"By signing up you accept our terms. Your collection is securely saved in the cloud."}
+      </div>
+    </div>
+  );
+}
+
 function Home({col, nav, lang}) {
   const total = col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
   const raras = col.filter(c=>c.rarity&&!["base","Base","base card"].includes(c.rarity)).length;
@@ -1385,32 +1538,67 @@ function Collection({col, nav, onTap, lang}) {
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
-  // ── Load collection from localStorage on startup ──
-  const [col,setCol] = useState(()=>{
-    try { const saved=localStorage.getItem("cardgoal_col"); return saved?JSON.parse(saved):[]; } catch{ return []; }
+  // ── Auth state ──
+  const [user,setUser] = useState(()=>{
+    try { const s=localStorage.getItem("cardgoal_user"); return s?JSON.parse(s):null; } catch { return null; }
   });
-  const [addedIds,setAdded] = useState(()=>{
-    try { const saved=localStorage.getItem("cardgoal_col"); const arr=saved?JSON.parse(saved):[]; return new Set(arr.map(c=>c._uid)); } catch{ return new Set(); }
-  });
+  // ── Collection ──
+  const [col,setCol] = useState([]);
+  const [addedIds,setAdded] = useState(new Set());
   const [modal,setModal]   = useState(null);
   const [lang,setLang]     = useState(()=>{ try{return localStorage.getItem("cardgoal_lang")||"es";}catch{return "es";} });
-  const [priceAlerts,setPriceAlerts] = useState(()=>{ try{const s=localStorage.getItem("cardgoal_alerts");return s?JSON.parse(s):[];}catch{return [];} });
+  const [priceAlerts,setPriceAlerts] = useState([]);
 
-  // ── Save collection to localStorage whenever it changes ──
-  useEffect(()=>{ try{localStorage.setItem("cardgoal_col",JSON.stringify(col));}catch{} },[col]);
   useEffect(()=>{ try{localStorage.setItem("cardgoal_lang",lang);}catch{} },[lang]);
-  useEffect(()=>{ try{localStorage.setItem("cardgoal_alerts",JSON.stringify(priceAlerts));}catch{} },[priceAlerts]);
 
-  const addCard = useCallback(card => {
-    const uid = card._uid||`uid_${Date.now()}`;
-    setCol(prev=>[...prev,{...card,_uid:uid}]);
-    setAdded(prev=>new Set([...prev,uid]));
+  // ── Load collection from Supabase when user logs in ──
+  useEffect(()=>{
+    if(!user?.token) return;
+    supa.loadCards(user.token).then(cards=>{
+      if(!Array.isArray(cards)) return;
+      const mapped = cards.map(c=>({
+        _uid: c.id, player:c.player, team:c.team, season:c.season,
+        manufacturer:c.manufacturer, collection:c.collection,
+        cardNumber:c.card_number, rarity:c.rarity, condition:c.condition,
+        priceEur:c.price_eur, priceMin:c.price_min, pricePrem:c.price_prem,
+        priceSource:c.price_source, changeWeek:c.change_week, changeMonth:c.change_month,
+        scanned:c.scanned, _dbId:c.id,
+      }));
+      setCol(mapped);
+      setAdded(new Set(mapped.map(c=>c._uid)));
+    }).catch(()=>{});
+  },[user]);
+
+  const handleAuth = useCallback(userData => {
+    setUser(userData);
+    try { localStorage.setItem("cardgoal_user", JSON.stringify(userData)); } catch {}
   },[]);
 
-  const removeCard = useCallback(uid => {
+  const handleLogout = useCallback(async () => {
+    if(user?.token) await supa.signOut(user.token).catch(()=>{});
+    setUser(null); setCol([]); setAdded(new Set());
+    try { localStorage.removeItem("cardgoal_user"); } catch {}
+  },[user]);
+
+  const addCard = useCallback(async card => {
+    const uid = card._uid||`uid_${Date.now()}`;
+    const newCard = {...card, _uid:uid};
+    setCol(prev=>[...prev,newCard]);
+    setAdded(prev=>new Set([...prev,uid]));
+    // Save to Supabase if logged in
+    if(user?.token) {
+      try { await supa.saveCard(newCard, user.token); } catch {}
+    }
+  },[user]);
+
+  const removeCard = useCallback(async uid => {
+    const card = col.find(c=>c._uid===uid);
     setCol(prev=>prev.filter(c=>c._uid!==uid));
     setAdded(prev=>{ const n=new Set(prev); n.delete(uid); return n; });
-  },[]);
+    if(user?.token && card?._dbId) {
+      try { await supa.deleteCard(card._dbId, user.token); } catch {}
+    }
+  },[user,col]);
 
   const addAlert = useCallback((card, targetPrice) => {
     setPriceAlerts(prev=>[...prev, {card, targetPrice, _uid:`alert_${Date.now()}`}]);
@@ -1440,23 +1628,35 @@ export default function CardGoal() {
       {/* Top header bar — premium */}
       <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${C.dark},${C.dark2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:`0 2px 8px ${C.dark}33`}}>⚽</div>
+          <div style={{width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#1A2035,#0D1525)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>⚽</div>
           <div>
-            <div style={{fontFamily:FD,fontSize:17,fontWeight:800,color:C.text,letterSpacing:"-0.01em",lineHeight:1}}>CardGoal</div>
-            <div style={{fontSize:10,color:C.hint,marginTop:2,letterSpacing:"0.04em"}}>{isES?"Tu portfolio de cromos":"Your card portfolio"}</div>
+            <div style={{fontFamily:FD,fontSize:17,fontWeight:800,color:C.white,letterSpacing:"-0.01em",lineHeight:1}}>CardGoal</div>
+            {user&&<div style={{fontSize:10,color:C.accent,marginTop:2}}>{user.email}</div>}
+            {!user&&<div style={{fontSize:10,color:C.hint,marginTop:2}}>{isES?"Tu portfolio de cromos":"Your card portfolio"}</div>}
           </div>
         </div>
-        <LangBtn lang={lang} setLang={setLang}/>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <LangBtn lang={lang} setLang={setLang}/>
+          {user&&<button onClick={handleLogout} style={{padding:"6px 12px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,fontSize:11,fontWeight:600,color:C.sub,cursor:"pointer",fontFamily:FD}}>
+            {isES?"Salir":"Logout"}
+          </button>}
+        </div>
       </div>
 
       {/* Main content — full width */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.white,minHeight:"calc(100vh - 120px)"}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
-          {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang}/>}
-          {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
-          {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang}/>}
-          {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
-          {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang}/>}
+          {!user ? (
+            <AuthScreen onAuth={handleAuth} lang={lang}/>
+          ) : (
+            <>
+              {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang}/>}
+              {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
+              {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang}/>}
+              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
+              {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang}/>}
+            </>
+          )}
         </div>
 
         {/* CARD DETAIL SHEET */}
