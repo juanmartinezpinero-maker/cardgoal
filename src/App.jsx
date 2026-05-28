@@ -164,15 +164,26 @@ function searchCards(query) {
 
 /* ─── PRICE — web search, called on demand ────────────────── */
 async function fetchPrice(card) {
-  // Web search for real eBay price — updates the estimate shown initially
   const raw = await callAI([{role:"user",content:
-`eBay sold price in EUR for: ${card.player} ${card.manufacturer||""} ${card.collection||""} ${card.rarity||"Base"} ${card.season||""}
-Search eBay SOLD listings last 60 days. USD×0.92=EUR.
-JSON only: {"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay sold (N sales)","changeWeek":8,"changeMonth":15}`
-  }], true, 350);
+`Eres un experto en cromos y cartas de fútbol coleccionables. Busca el precio real de mercado en EUR para esta carta:
+Jugador: ${card.player} | Marca: ${card.manufacturer||"?"} | Colección: ${card.collection||"?"} | Rareza: ${card.rarity||"Base"} | Temporada: ${card.season||"?"}
+
+Busca en TODAS estas fuentes por orden de prioridad:
+1. eBay España y eBay internacional (ventas completadas últimos 90 días) - convierte USD a EUR (x0.92)
+2. Cardmarket (si es una carta TCG)
+3. Todocoleccion.net (para cromos españoles, Mundicromo, Panini Liga, Megacracks, cromos antiguos)
+4. Wallapop (para cromos españoles de segunda mano)
+
+Si es un cromo español antiguo (Mundicromo, Megacracks, Este, Panini Liga española), busca especialmente en Todocoleccion.net y Wallapop donde hay más oferta de este tipo.
+
+Devuelve SOLO JSON con el precio encontrado:
+{"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"Todocoleccion.net","changeWeek":0,"changeMonth":0}
+
+Si no encuentras precio en ninguna fuente, devuelve: {"priceEur":null}`
+  }], true, 400);
   const p = jparse(raw);
   if (!p || !p.priceEur) return null;
-  return { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay Sold Listings", changeWeek:num(p.changeWeek), changeMonth:num(p.changeMonth) };
+  return { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay/Todocoleccion", changeWeek:num(p.changeWeek)||0, changeMonth:num(p.changeMonth)||0 };
 }
 
 /* ─── GENERATE CARD SVG ──────────────────────────────────────
@@ -1366,4 +1377,3 @@ export default function CardGoal() {
     </div>
   );
 }
-
