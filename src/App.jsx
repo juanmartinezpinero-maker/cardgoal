@@ -182,7 +182,27 @@ Devuelve SOLO JSON con el precio encontrado:
 Si no encuentras precio en ninguna fuente, devuelve: {"priceEur":null}`
   }], true, 400);
   const p = jparse(raw);
-  if (!p || !p.priceEur) return null;
+  if (!p || !p.priceEur) {
+    // No price found — ask AI for an estimate based on card characteristics
+    const estRaw = await callAI([{role:"user",content:
+`Eres un experto tasador de cromos y cartas de fútbol coleccionables con 20 años de experiencia.
+No has encontrado precio de mercado para esta carta: ${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
+
+Haz una estimación del valor basándote en:
+- La importancia del jugador (leyenda, internacional, local)
+- La rareza y tipo de carta (holográfica, base, numerada)
+- La época (cromos vintage valen más)
+- El estado del mercado de cromos vintage españoles
+
+Devuelve SOLO JSON:
+{"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación experta CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
+    }], false, 300);
+    const est = jparse(estRaw);
+    if (est && est.priceEur) {
+      return { priceEur:num(est.priceEur), priceMin:num(est.priceMin), pricePrem:num(est.pricePrem), priceSource:"⚡ Estimación experta (sin ventas recientes)", changeWeek:0, changeMonth:0, isEstimate:true };
+    }
+    return null;
+  }
   return { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay/Todocoleccion", changeWeek:num(p.changeWeek)||0, changeMonth:num(p.changeMonth)||0 };
 }
 
@@ -614,7 +634,7 @@ function LangBtn({lang,setLang}) {
    Slides up over the phone screen.
    Fetches price on mount — separate from search results.
 ──────────────────────────────────────────────────────────────── */
-function CardSheet({card, onClose, onAdd, isAdded, lang}) {
+function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
   const [price,setPrice]     = useState(null);
   const [loading,setLoading] = useState(true);
 
@@ -777,7 +797,29 @@ function CardSheet({card, onClose, onAdd, isAdded, lang}) {
           <button onClick={doAdd} disabled={added} style={{width:"100%",padding:"15px",background:added?C.accentL:C.accent,border:added?`1.5px solid ${C.accent}`:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:added?C.accent:"#fff",cursor:added?"default":"pointer",transition:"all .2s",marginBottom:8}}>
             {added?t.added:t.add}
           </button>
-          <div style={{fontSize:10,color:C.hint,textAlign:"center"}}>{t.source}</div>
+          {/* WhatsApp share */}
+          <button onClick={()=>{
+            const p2=price?.priceEur;
+            const txt=`🃏 ${card.player}\n📦 ${card.collection||card.manufacturer||""} ${card.rarity||""}\n💶 ${p2?eur(p2):"Sin precio"}\n\nValorado con CardGoal ⚽\nhttps://cardgoal-hew7.vercel.app`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
+          }} style={{width:"100%",padding:"12px",background:"#25D366",border:"none",borderRadius:14,fontFamily:FD,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8}}>
+            📲 Compartir por WhatsApp
+          </button>
+
+          {/* Price alert */}
+          {price?.priceEur&&(
+            <button onClick={()=>{
+              const target=window.prompt(`Alerta para ${card.player}\n\n¿Avisarte cuando baje de cuántos €?`);
+              if(target&&!isNaN(target)){
+                onAddAlert&&onAddAlert(card,parseFloat(target));
+                window.alert(`✅ Alerta creada para ${card.player} por debajo de ${target}€`);
+              }
+            }} style={{width:"100%",padding:"12px",background:C.blueL,border:`1.5px solid ${C.blue}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:700,color:C.blue,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:6}}>
+              🔔 Alerta de precio
+            </button>
+          )}
+
+          <div style={{fontSize:10,color:C.hint,textAlign:"center",marginTop:10}}>{t.source}</div>
         </div>
       </div>
     </div>
@@ -1284,15 +1326,35 @@ function Collection({col, nav, onTap, lang}) {
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
-  const [col,setCol]       = useState([]);
-  const [addedIds,setAdded]= useState(new Set());
+  // ── Load collection from localStorage on startup ──
+  const [col,setCol] = useState(()=>{
+    try { const saved=localStorage.getItem("cardgoal_col"); return saved?JSON.parse(saved):[]; } catch{ return []; }
+  });
+  const [addedIds,setAdded] = useState(()=>{
+    try { const saved=localStorage.getItem("cardgoal_col"); const arr=saved?JSON.parse(saved):[]; return new Set(arr.map(c=>c._uid)); } catch{ return new Set(); }
+  });
   const [modal,setModal]   = useState(null);
-  const [lang,setLang]     = useState("es");
+  const [lang,setLang]     = useState(()=>{ try{return localStorage.getItem("cardgoal_lang")||"es";}catch{return "es";} });
+  const [priceAlerts,setPriceAlerts] = useState(()=>{ try{const s=localStorage.getItem("cardgoal_alerts");return s?JSON.parse(s):[];}catch{return [];} });
+
+  // ── Save collection to localStorage whenever it changes ──
+  useEffect(()=>{ try{localStorage.setItem("cardgoal_col",JSON.stringify(col));}catch{} },[col]);
+  useEffect(()=>{ try{localStorage.setItem("cardgoal_lang",lang);}catch{} },[lang]);
+  useEffect(()=>{ try{localStorage.setItem("cardgoal_alerts",JSON.stringify(priceAlerts));}catch{} },[priceAlerts]);
 
   const addCard = useCallback(card => {
     const uid = card._uid||`uid_${Date.now()}`;
     setCol(prev=>[...prev,{...card,_uid:uid}]);
     setAdded(prev=>new Set([...prev,uid]));
+  },[]);
+
+  const removeCard = useCallback(uid => {
+    setCol(prev=>prev.filter(c=>c._uid!==uid));
+    setAdded(prev=>{ const n=new Set(prev); n.delete(uid); return n; });
+  },[]);
+
+  const addAlert = useCallback((card, targetPrice) => {
+    setPriceAlerts(prev=>[...prev, {card, targetPrice, _uid:`alert_${Date.now()}`}]);
   },[]);
 
   const total = col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
@@ -1371,7 +1433,7 @@ export default function CardGoal() {
           </div>
 
           {/* CARD DETAIL SHEET — slides over everything */}
-          {modal&&<CardSheet card={modal} onClose={()=>setModal(null)} onAdd={addCard} isAdded={addedIds.has(modal._uid)} lang={lang}/>}
+          {modal&&<CardSheet card={modal} onClose={()=>setModal(null)} onAdd={addCard} isAdded={addedIds.has(modal._uid)} onAddAlert={addAlert} lang={lang}/>}
         </div>
       </div>
     </div>
