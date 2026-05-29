@@ -117,6 +117,105 @@ const supa = {
   }
 };
 
+/* ─── FREEMIUM ────────────────────────────────────────────── */
+const LIMITS = { scans: 5, grades: 3, collection: 15 };
+
+function getUsage(userId) {
+  try {
+    const key = `cg_usage_${userId}_${new Date().getMonth()}`;
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : { scans:0, grades:0 };
+  } catch { return { scans:0, grades:0 }; }
+}
+
+function saveUsage(userId, usage) {
+  try {
+    const key = `cg_usage_${userId}_${new Date().getMonth()}`;
+    localStorage.setItem(key, JSON.stringify(usage));
+  } catch {}
+}
+
+function canScan(userId, isPremium) {
+  if(isPremium) return true;
+  const u = getUsage(userId);
+  return u.scans < LIMITS.scans;
+}
+
+function canGrade(userId, isPremium) {
+  if(isPremium) return true;
+  const u = getUsage(userId);
+  return u.grades < LIMITS.grades;
+}
+
+function incrementScan(userId) {
+  const u = getUsage(userId);
+  saveUsage(userId, {...u, scans: u.scans + 1});
+}
+
+function incrementGrade(userId) {
+  const u = getUsage(userId);
+  saveUsage(userId, {...u, grades: u.grades + 1});
+}
+
+/* ─── PAYWALL MODAL ────────────────────────────────────────── */
+function PaywallModal({type, onClose, lang}) {
+  const isES = lang==="es";
+  const info = {
+    scan: {
+      icon:"📷",
+      title: isES?"Has usado tus 5 escaneos gratuitos":"You've used your 5 free scans",
+      sub: isES?"Actualiza a Premium para escaneos ilimitados":"Upgrade to Premium for unlimited scans",
+    },
+    grade: {
+      icon:"🔬",
+      title: isES?"Has usado tus 3 análisis PSA gratuitos":"You've used your 3 free PSA analyses",
+      sub: isES?"Actualiza a Premium para análisis ilimitados":"Upgrade to Premium for unlimited analyses",
+    },
+    collection: {
+      icon:"🗂️",
+      title: isES?"Límite de 50 cartas alcanzado":"50 card limit reached",
+      sub: isES?"Actualiza a Premium para colección ilimitada":"Upgrade to Premium for unlimited collection",
+    }
+  };
+  const i = info[type]||info.scan;
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+      <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:24,padding:"32px 24px",maxWidth:340,width:"100%",textAlign:"center"}}>
+        <div style={{fontSize:52,marginBottom:16}}>{i.icon}</div>
+        <div style={{fontFamily:FD,fontSize:18,fontWeight:800,color:C.white,marginBottom:8,lineHeight:1.3}}>{i.title}</div>
+        <div style={{fontSize:13,color:C.sub,marginBottom:24,lineHeight:1.6}}>{i.sub}</div>
+
+        {/* Premium features */}
+        <div style={{background:C.bg2,borderRadius:14,padding:"16px",marginBottom:24,textAlign:"left"}}>
+          {[
+            [isES?"Escaneos ilimitados":"Unlimited scans","📷"],
+            [isES?"Análisis PSA ilimitados":"Unlimited PSA","🔬"],
+            [isES?"Colección ilimitada":"Unlimited collection","🗂️"],
+            [isES?"Precio real de eBay":"Real eBay price","💶"],
+          ].map(([t,ic])=>(
+            <div key={t} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{fontSize:16}}>{ic}</span>
+              <span style={{fontSize:13,color:C.white,fontWeight:500}}>{t}</span>
+              <span style={{marginLeft:"auto",color:C.accent,fontSize:14}}>✓</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent,marginBottom:4}}>2,95€<span style={{fontSize:14,color:C.sub,fontWeight:400}}>/mes</span></div>
+        <div style={{fontSize:11,color:C.hint,marginBottom:20}}>{isES?"Cancela cuando quieras":"Cancel anytime"}</div>
+
+        <button onClick={()=>window.open("mailto:cardgoal.es@gmail.com?subject=Premium CardGoal","_blank")} style={{width:"100%",padding:"15px",background:C.accent,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:C.bg,cursor:"pointer",marginBottom:10}}>
+          {isES?"Activar Premium →":"Activate Premium →"}
+        </button>
+        <button onClick={onClose} style={{width:"100%",padding:"12px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
+          {isES?"Ahora no":"Not now"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── HELPERS ─────────────────────────────────────────────── */
 const eur = n => { const v=parseFloat(n); if(!isFinite(v)) return "—"; return new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v); };
 const num = v => { const n=parseFloat(v); return isFinite(n)?n:null; };
@@ -952,7 +1051,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
 }
 
 /* ─── GRADE SHEET ─────────────────────────────────────────── */
-function GradeSheet({lang,setLang}) {
+function GradeSheet({lang,setLang,userId,isPremium,onPaywall}) {
   const [ph,setPh]=useState("idle");
   const [durl,setDurl]=useState(null);
   const [res,setRes]=useState(null);
@@ -1439,7 +1538,7 @@ function Search({onAdd, addedIds, onTap, lang}) {
 }
 
 /* SCANNER */
-function Scanner({onAdd, lang}) {
+function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
   const [ph,setPh]=useState("idle");
   const [durl,setDurl]=useState(null);
   const [card,setCard]=useState(null);
@@ -1451,13 +1550,16 @@ function Scanner({onAdd, lang}) {
   const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);if(fileRef.current)fileRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
-    // Compress image first to stay under Gemini 4MB limit
+    // Check freemium limit
+    if(!canScan(userId, isPremium)) { onPaywall&&onPaywall(); return; }
+    // Compress image first
     const compressed = await compressImage(file);
     const d = compressed || await toDataURL(file);
     setDurl(d);setPh("scanning");setAdded(false);
     try{
       const b64=d.split(",")[1];
       const c=await scanCard(b64,"image/jpeg");setCard(c);setPh("pricing");
+      incrementScan(userId); // count usage
       let p=null;try{p=await fetchPrice(c);}catch{}
       setPrice(p);setPh("result");
     }catch(e){setErr(e.message==="NO_CARD"?(isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card."):(isES?"No pude identificarla. Prueba con más luz.":"Couldn't identify it. Try better lighting."));setPh("error");}
@@ -1470,6 +1572,14 @@ function Scanner({onAdd, lang}) {
         <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>{isES?"Scanner IA":"AI Scanner"}</div>
         <div style={{fontSize:13,color:C.sub,marginTop:6,lineHeight:1.6,maxWidth:260}}>{isES?"Haz foto a tu carta. La IA la identifica y busca el precio real en eBay y Cardmarket.":"Take a photo. AI identifies it and finds the real price on eBay and Cardmarket."}</div>
       </div>
+      {/* Usage counter */}
+      {!isPremium&&userId&&(()=>{
+        const u=getUsage(userId);
+        const left=Math.max(0,LIMITS.scans-u.scans);
+        return <div style={{background:left>0?C.accentL:"rgba(255,82,82,0.12)",border:`1px solid ${left>0?C.accent:C.red}44`,borderRadius:10,padding:"8px 16px",fontSize:12,color:left>0?C.accent:C.red,fontWeight:600}}>
+          {left>0?(isES?`${left} escaneos gratuitos restantes este mes`:`${left} free scans left this month`):(isES?"Sin escaneos gratuitos — actualiza a Premium":"No free scans left — upgrade to Premium")}
+        </div>;
+      })()}
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>process(e.target.files?.[0])}/>
       <button onClick={()=>fileRef.current?.click()} style={{width:"100%",maxWidth:280,padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
         📷 {isES?"Usar cámara":"Use camera"}
@@ -1630,6 +1740,8 @@ export default function CardGoal() {
   const [col,setCol] = useState([]);
   const [addedIds,setAdded] = useState(new Set());
   const [modal,setModal]   = useState(null);
+  const [paywall,setPaywall] = useState(null); // null | "scan" | "grade" | "collection"
+  const isPremium = user?.isPremium||false;
   const [lang,setLang]     = useState(()=>{ try{return localStorage.getItem("cardgoal_lang")||"es";}catch{return "es";} });
   const [priceAlerts,setPriceAlerts] = useState([]);
 
@@ -1762,9 +1874,9 @@ export default function CardGoal() {
             <>
               {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
-              {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang}/>}
+              {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
               {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
-              {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang}/>}
+              {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")}/>}
             </>
           )}
         </div>
