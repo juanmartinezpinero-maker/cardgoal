@@ -1199,7 +1199,12 @@ function AuthScreen({onAuth, lang}) {
           style={{width:"100%",padding:"14px 16px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,fontSize:14,color:C.white,outline:"none",fontFamily:FB,boxSizing:"border-box"}}
         />
 
-        {err&&<div style={{background:"rgba(255,82,82,0.12)",border:`1px solid ${C.red}44`,borderRadius:10,padding:"10px 14px",fontSize:12,color:C.red}}>{err}</div>}
+        {err&&<div style={{
+          background: err.startsWith("✅") ? "rgba(0,230,118,0.12)" : "rgba(255,82,82,0.12)",
+          border: `1px solid ${err.startsWith("✅") ? C.accent+"66" : C.red+"44"}`,
+          borderRadius:10,padding:"10px 14px",fontSize:12,
+          color: err.startsWith("✅") ? C.accent : C.red
+        }}>{err}</div>}
 
         <button onClick={handle} disabled={loading||!email.trim()||!pass.trim()} style={{width:"100%",padding:"15px",background:email.trim()&&pass.trim()?C.accent:C.bg3,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:email.trim()&&pass.trim()?C.bg:C.hint,cursor:email.trim()&&pass.trim()?"pointer":"default",transition:"all .2s",marginTop:4}}>
           {loading?"...":(mode==="login"?(isES?"Entrar →":"Sign in →"):(isES?"Crear cuenta →":"Create account →"))}
