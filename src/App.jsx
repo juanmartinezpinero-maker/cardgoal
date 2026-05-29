@@ -1607,10 +1607,16 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
         </div>;
       })()}
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>process(e.target.files?.[0])}/>
-      <button onClick={()=>fileRef.current?.click()} style={{width:"100%",maxWidth:280,padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
+      <button onClick={()=>{
+        if(!canScan(userId, isPremium)){ onPaywall&&onPaywall(); return; }
+        fileRef.current?.click();
+      }} style={{width:"100%",maxWidth:280,padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
         📷 {isES?"Usar cámara":"Use camera"}
       </button>
-      <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}} style={{width:"100%",maxWidth:280,padding:"13px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,fontFamily:FD,fontSize:14,fontWeight:700,color:C.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:C.shadow}}>
+      <button onClick={()=>{
+        if(!canScan(userId, isPremium)){ onPaywall&&onPaywall(); return; }
+        if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}
+      }} style={{width:"100%",maxWidth:280,padding:"13px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,fontFamily:FD,fontSize:14,fontWeight:700,color:C.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:C.shadow}}>
         🖼️ {isES?"Subir imagen":"Upload image"}
       </button>
     </div>
