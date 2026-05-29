@@ -180,7 +180,7 @@ function PaywallModal({type, onClose, lang}) {
   const i = info[type]||info.scan;
 
   return (
-    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9999,background:"rgba(0,0,0,0.92)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
       <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:24,padding:"32px 24px",maxWidth:340,width:"100%",textAlign:"center"}}>
         <div style={{fontSize:52,marginBottom:16}}>{i.icon}</div>
         <div style={{fontFamily:FD,fontSize:18,fontWeight:800,color:C.white,marginBottom:8,lineHeight:1.3}}>{i.title}</div>
@@ -1950,6 +1950,9 @@ export default function CardGoal() {
 
       {/* Bottom padding so content doesn't hide under nav */}
       <div style={{height:70}}/>
+
+      {/* Paywall modal — outside everything, always on top */}
+      {paywall&&<PaywallModal type={paywall} onClose={()=>setPaywall(null)} lang={lang}/>}
     </div>
   );
 }
