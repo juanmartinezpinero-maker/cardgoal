@@ -1135,10 +1135,10 @@ function AuthScreen({onAuth, lang}) {
           setErr(res.error.message||"Error al registrarse");
           setLoading(false); return;
         }
-        // Check if email confirmation required
+        // If email confirmation required, just switch to login with success message
         if(res.user && !res.session) {
-          setErr(isES?"✅ Cuenta creada. Revisa tu email para confirmar y luego entra.":"✅ Account created. Check your email to confirm then sign in.");
           setMode("login");
+          setErr(isES?"✅ ¡Cuenta creada! Ya puedes entrar con tu email y contraseña.":"✅ Account created! You can now sign in.");
           setLoading(false); return;
         }
         // Auto login after register if no confirmation needed
@@ -1149,7 +1149,7 @@ function AuthScreen({onAuth, lang}) {
       if(res.error) {
         const msg = res.error.message||"";
         if(msg.includes("Email not confirmed")) {
-          setErr(isES?"Debes confirmar tu email primero. Revisa tu bandeja de entrada.":"You must confirm your email first. Check your inbox.");
+          setErr(isES?"Tu cuenta está pendiente de activación. Contacta con soporte en cardgoal.es":"Your account is pending activation. Contact support at cardgoal.es");
         } else if(msg.includes("Invalid login")) {
           setErr(isES?"Email o contraseña incorrectos":"Wrong email or password");
         } else {
