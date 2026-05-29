@@ -1347,7 +1347,7 @@ function AuthScreen({onAuth, lang}) {
   );
 }
 
-function Home({col, nav, lang}) {
+function Home({col, nav, lang, isPremium, user}) {
   const total = col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
   const raras = col.filter(c=>c.rarity&&!["base","Base","base card"].includes(c.rarity)).length;
   const isES = lang==="es";
@@ -1922,7 +1922,7 @@ export default function CardGoal() {
             <AuthScreen onAuth={handleAuth} lang={lang}/>
           ) : (
             <>
-              {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang}/>}
+              {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
               {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
               {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
