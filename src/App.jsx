@@ -547,11 +547,14 @@ function CardViz({ card={}, photo=null, sz="md" }) {
   const uid = `${jersey}${sz}${(card.collection||"x")[0]}`;
 
   if (img) {
-    // Scanner photo — show real image
+    // Scanner photo — fill entire card with real photo
     return (
-      <div style={{width:s.w,height:s.h,borderRadius:s.r,background:series.bg,border:rs?`2px solid ${rs.c}`:"1.5px solid rgba(255,255,255,0.2)",boxShadow:rs?`0 0 20px ${rs.c}55`:"0 4px 20px rgba(0,0,0,0.4)",position:"relative",overflow:"hidden",flexShrink:0}}>
-        <img src={img} alt="" style={{width:"100%",height:"75%",objectFit:"cover",objectPosition:"top",display:"block"}}/>
-        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.8)",padding:`${s.fp/2}px ${s.fp}px ${s.fp}px`}}>
+      <div style={{width:s.w,height:s.h,borderRadius:s.r,border:rs?`2px solid ${rs.c}`:"1.5px solid rgba(255,255,255,0.15)",boxShadow:rs?`0 0 20px ${rs.c}55`:"0 4px 20px rgba(0,0,0,0.4)",position:"relative",overflow:"hidden",flexShrink:0,background:"#000"}}>
+        {/* Full card photo — no white gaps */}
+        <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",display:"block"}}/>
+        {/* Gradient overlay for name readability */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:"40%",background:"linear-gradient(transparent,rgba(0,0,0,0.85))"}}/>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:`${s.fp/2}px ${s.fp}px ${s.fp}px`}}>
           <div style={{fontSize:s.fn,fontWeight:800,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{player}</div>
           <div style={{fontSize:s.ft,color:series.acc,fontWeight:600,marginTop:1}}>{card.team||""}</div>
         </div>
