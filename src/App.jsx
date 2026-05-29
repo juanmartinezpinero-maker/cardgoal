@@ -205,8 +205,8 @@ function PaywallModal({type, onClose, lang}) {
         <div style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent,marginBottom:4}}>2,95€<span style={{fontSize:14,color:C.sub,fontWeight:400}}>/mes</span></div>
         <div style={{fontSize:11,color:C.hint,marginBottom:20}}>{isES?"Cancela cuando quieras":"Cancel anytime"}</div>
 
-        <button onClick={()=>window.open("mailto:cardgoal.es@gmail.com?subject=Premium CardGoal","_blank")} style={{width:"100%",padding:"15px",background:C.accent,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:C.bg,cursor:"pointer",marginBottom:10}}>
-          {isES?"Activar Premium →":"Activate Premium →"}
+        <button onClick={()=>startCheckout(window._cgUserEmail||"")} style={{width:"100%",padding:"15px",background:C.accent,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:C.bg,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
+          {isES?"Activar Premium — 2,95€/mes →":"Activate Premium — €2.95/mo →"}
         </button>
         <button onClick={onClose} style={{width:"100%",padding:"12px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
           {isES?"Ahora no":"Not now"}
@@ -214,6 +214,31 @@ function PaywallModal({type, onClose, lang}) {
       </div>
     </div>
   );
+}
+
+/* ─── STRIPE ──────────────────────────────────────────────── */
+const STRIPE_PK = "pk_test_51TcWZiCGqeJOlR1JLOOvKcpNeIa9ANXqInqgIHLIG09SAWFEXNx1t9mqwcPsr7YBh2VgUmtLlIXwtMFDbNVAPdro00fFpAhMl1";
+
+async function startCheckout(email) {
+  const r = await fetch('/api/stripe', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action:'create-checkout', email})
+  });
+  const d = await r.json();
+  if(d.url) window.location.href = d.url;
+}
+
+async function checkPremium(email) {
+  try {
+    const r = await fetch('/api/stripe', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'check-subscription', email})
+    });
+    const d = await r.json();
+    return d.isPremium||false;
+  } catch { return false; }
 }
 
 /* ─── HELPERS ─────────────────────────────────────────────── */
@@ -1391,6 +1416,18 @@ function Home({col, nav, lang}) {
           </div>
           <div style={{marginLeft:"auto",fontSize:18,color:C.gold,flexShrink:0}}>›</div>
         </button>
+
+        {/* Premium banner */}
+        {!isPremium&&<button onClick={()=>startCheckout(user?.email||"")} style={{width:"100%",padding:"16px",background:"linear-gradient(135deg,#1a0a2e,#2d1054)",border:`1px solid rgba(160,80,255,0.4)`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:"0 4px 20px rgba(120,40,200,0.2)",transition:"transform .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+          onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
+          <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#9b4dff,#6a1fd4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>⭐</div>
+          <div style={{textAlign:"left",flex:1}}>
+            <div style={{fontFamily:FD,fontSize:14,fontWeight:700,color:"#fff"}}>{isES?"Hazte Premium":"Go Premium"}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{isES?"Escaneos ilimitados · Sin anuncios · 2,95€/mes":"Unlimited scans · No ads · €2.95/mo"}</div>
+          </div>
+          <div style={{flexShrink:0,background:"linear-gradient(135deg,#9b4dff,#6a1fd4)",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:"#fff"}}>→</div>
+        </button>}
       </div>
 
       {/* Recent cards */}
@@ -1732,6 +1769,14 @@ function Collection({col, nav, onTap, lang}) {
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
+  // Check if returning from Stripe payment
+  useEffect(()=>{
+    const params = new URLSearchParams(window.location.search);
+    if(params.get("premium")==="success") {
+      // Reload user to check premium status
+      setTimeout(()=>window.location.href="https://cardgoal.es",1000);
+    }
+  },[]);
   // ── Auth state ──
   const [user,setUser] = useState(()=>{
     try { const s=localStorage.getItem("cardgoal_user"); return s?JSON.parse(s):null; } catch { return null; }
@@ -1765,9 +1810,13 @@ export default function CardGoal() {
     }).catch(()=>{});
   },[user]);
 
-  const handleAuth = useCallback(userData => {
-    setUser(userData);
-    try { localStorage.setItem("cardgoal_user", JSON.stringify(userData)); } catch {}
+  const handleAuth = useCallback(async userData => {
+    // Check if user has active Stripe subscription
+    const isPremium = await checkPremium(userData.email).catch(()=>false);
+    const fullUser = {...userData, isPremium};
+    setUser(fullUser);
+    window._cgUserEmail = userData.email; // for Stripe checkout
+    try { localStorage.setItem("cardgoal_user", JSON.stringify(fullUser)); } catch {}
   },[]);
 
   // Verify token on startup and refresh if needed
@@ -1868,6 +1917,7 @@ export default function CardGoal() {
       {/* Main content — full width */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
+          {user&&(window._cgUserEmail=user.email,null)}
           {!user ? (
             <AuthScreen onAuth={handleAuth} lang={lang}/>
           ) : (
