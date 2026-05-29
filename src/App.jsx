@@ -97,6 +97,22 @@ const supa = {
       method:"DELETE",
       headers:{...this.headers, "Authorization":`Bearer ${token}`}
     });
+  },
+
+  async refreshToken(refreshToken) {
+    const r = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method:"POST",
+      headers:this.headers,
+      body: JSON.stringify({refresh_token: refreshToken})
+    });
+    return r.json();
+  },
+
+  async verifyToken(token) {
+    const r = await fetch(`${SUPA_URL}/auth/v1/user`, {
+      headers:{...this.headers, "Authorization":`Bearer ${token}`}
+    });
+    return r.ok;
   }
 };
 
@@ -1141,7 +1157,7 @@ function AuthScreen({onAuth, lang}) {
         setLoading(false); return;
       }
       if(res.access_token) {
-        onAuth({token: res.access_token, email: res.user?.email||em, id: res.user?.id});
+        onAuth({token: res.access_token, refreshToken: res.refresh_token, email: res.user?.email||em, id: res.user?.id});
       } else {
         setErr(isES?"No se pudo iniciar sesión. Inténtalo de nuevo.":"Could not sign in. Please try again.");
       }
@@ -1634,6 +1650,26 @@ export default function CardGoal() {
   const handleAuth = useCallback(userData => {
     setUser(userData);
     try { localStorage.setItem("cardgoal_user", JSON.stringify(userData)); } catch {}
+  },[]);
+
+  // Verify token on startup and refresh if needed
+  useEffect(()=>{
+    if(!user?.token) return;
+    supa.verifyToken(user.token).then(valid => {
+      if(!valid && user.refreshToken) {
+        supa.refreshToken(user.refreshToken).then(res => {
+          if(res.access_token) {
+            const updated = {...user, token: res.access_token, refreshToken: res.refresh_token};
+            setUser(updated);
+            try { localStorage.setItem("cardgoal_user", JSON.stringify(updated)); } catch {}
+          } else {
+            // Token expired, logout
+            setUser(null);
+            try { localStorage.removeItem("cardgoal_user"); } catch {}
+          }
+        }).catch(()=>{});
+      }
+    }).catch(()=>{});
   },[]);
 
   const handleLogout = useCallback(async () => {
