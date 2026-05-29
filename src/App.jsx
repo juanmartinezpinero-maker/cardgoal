@@ -273,15 +273,11 @@ async function fetchPrice(card) {
   if (priceCache[cacheKey]) return priceCache[cacheKey];
 
   const raw = await callAI([{role:"user",content:
-`Experto tasador de cromos de fútbol. Estima precio de mercado en EUR para:
-Jugador: ${card.player} | Marca: ${card.manufacturer||"?"} | Colección: ${card.collection||"?"} | Rareza: ${card.rarity||"Base"} | Temporada: ${card.season||"?"}
-
-Basándote en eBay, Cardmarket, Todocoleccion.net y Wallapop.
-Para cromos españoles antiguos (Mundicromo, Megacracks, Panini Liga) usa precios del mercado español.
-
-SOLO JSON:
-{"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay/Todocoleccion","changeWeek":5,"changeMonth":10}`
-  }], false, 250);
+`Busca el precio real en EUR de esta carta de fútbol en eBay ventas completadas y Cardmarket:
+${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
+Para cromos españoles busca también en Todocoleccion.net y Wallapop.
+SOLO JSON: {"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay sold","changeWeek":5,"changeMonth":10}`
+  }], true, 300);
   const p = jparse(raw);
   if (!p || !p.priceEur) {
     // Expert estimate fallback
@@ -1699,7 +1695,7 @@ export default function CardGoal() {
       </div>
 
       {/* Main content — full width */}
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.white,minHeight:"calc(100vh - 120px)"}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
           {!user ? (
             <AuthScreen onAuth={handleAuth} lang={lang}/>
