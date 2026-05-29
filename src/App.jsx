@@ -116,13 +116,44 @@ function jparse(raw) {
 }
 
 /* ─── AI ──────────────────────────────────────────────────── */
+const GEMINI_KEY = "AIzaSyAb8RN6J5QCFgISIiHo1CTZkbNTP5ABR3qgyJeWrwuyzy625mNg";
+
 async function callAI(msgs, search=false, maxTok=800) {
-  const body = { model:"claude-opus-4-7", max_tokens:maxTok, messages:msgs };
-  if (search) body.tools = [{type:"web_search_20250305",name:"web_search"}];
-  const r = await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  if (!r.ok) { const e=await r.json().catch(()=>{}); throw new Error(e?.error?.message||`HTTP ${r.status}`); }
+  // Convert message format to Gemini format
+  const contents = msgs.map(msg => {
+    if(typeof msg.content === "string") {
+      return { role: msg.role==="assistant"?"model":"user", parts:[{text:msg.content}] };
+    }
+    const parts = msg.content.map(c => {
+      if(c.type==="text") return {text:c.text};
+      if(c.type==="image") return { inlineData:{ mimeType:c.source.media_type, data:c.source.data } };
+      return null;
+    }).filter(Boolean);
+    return { role:"user", parts };
+  });
+
+  const model = msgs.some(m=>Array.isArray(m.content)&&m.content.some(c=>c.type==="image"))
+    ? "gemini-1.5-flash"   // vision model for images
+    : search
+      ? "gemini-1.5-flash" // with search grounding
+      : "gemini-1.5-flash"; // fast model for text
+
+  const body = {
+    contents,
+    generationConfig: { maxOutputTokens: maxTok, temperature: 0.2 },
+  };
+
+  if(search) body.tools = [{googleSearch:{}}];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+  const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+
+  if(!r.ok) {
+    const e = await r.json().catch(()=>{});
+    throw new Error(e?.error?.message||`HTTP ${r.status}`);
+  }
   const d = await r.json();
-  return d.content?.filter(b=>b.type==="text").map(b=>b.text).join("\n")||"";
+  return d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("\n")||"";
 }
 
 /* ─── SEARCH — fast, no web search needed ─────────────────── */
@@ -1070,23 +1101,47 @@ function AuthScreen({onAuth, lang}) {
   const isES = lang==="es";
 
   const handle = async () => {
-    if(!email.trim()||!pass.trim()) return;
+    const em = email.trim();
+    const pw = pass.trim();
+    if(!em||!pw) { setErr(isES?"Rellena email y contraseña":"Fill in email and password"); return; }
+    if(pw.length < 6) { setErr(isES?"La contraseña debe tener al menos 6 caracteres":"Password must be at least 6 characters"); return; }
     setLoading(true); setErr("");
     try {
       let res;
       if(mode==="register") {
-        res = await supa.signUp(email.trim(), pass);
-        if(res.error) { setErr(res.error.message||"Error al registrarse"); setLoading(false); return; }
-        // Auto login after register
-        res = await supa.signIn(email.trim(), pass);
+        res = await supa.signUp(em, pw);
+        if(res.error) {
+          setErr(res.error.message||"Error al registrarse");
+          setLoading(false); return;
+        }
+        // Check if email confirmation required
+        if(res.user && !res.session) {
+          setErr(isES?"✅ Cuenta creada. Revisa tu email para confirmar y luego entra.":"✅ Account created. Check your email to confirm then sign in.");
+          setMode("login");
+          setLoading(false); return;
+        }
+        // Auto login after register if no confirmation needed
+        res = await supa.signIn(em, pw);
       } else {
-        res = await supa.signIn(email.trim(), pass);
+        res = await supa.signIn(em, pw);
       }
-      if(res.error) { setErr(isES?"Email o contraseña incorrectos":"Wrong email or password"); setLoading(false); return; }
+      if(res.error) {
+        const msg = res.error.message||"";
+        if(msg.includes("Email not confirmed")) {
+          setErr(isES?"Debes confirmar tu email primero. Revisa tu bandeja de entrada.":"You must confirm your email first. Check your inbox.");
+        } else if(msg.includes("Invalid login")) {
+          setErr(isES?"Email o contraseña incorrectos":"Wrong email or password");
+        } else {
+          setErr(msg||"Error");
+        }
+        setLoading(false); return;
+      }
       if(res.access_token) {
-        onAuth({token: res.access_token, email: res.user?.email||email, id: res.user?.id});
+        onAuth({token: res.access_token, email: res.user?.email||em, id: res.user?.id});
+      } else {
+        setErr(isES?"No se pudo iniciar sesión. Inténtalo de nuevo.":"Could not sign in. Please try again.");
       }
-    } catch(e) { setErr(e.message||"Error"); }
+    } catch(e) { setErr(e.message||"Error de conexión"); }
     setLoading(false);
   };
 
