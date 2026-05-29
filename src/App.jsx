@@ -206,7 +206,7 @@ function PaywallModal({type, onClose, lang}) {
         <div style={{fontSize:11,color:C.hint,marginBottom:20}}>{isES?"Cancela cuando quieras":"Cancel anytime"}</div>
 
         <button onClick={()=>startCheckout(window._cgUserEmail||"")} style={{width:"100%",padding:"15px",background:C.accent,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:C.bg,cursor:"pointer",marginBottom:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
-          {isES?"Activar Premium — 2,95€/mes →":"Activate Premium — €2.95/mo →"}
+          {isES?"💳 Activar Premium — 2,95€/mes":"💳 Activate Premium — €2.95/mo"}
         </button>
         <button onClick={onClose} style={{width:"100%",padding:"12px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
           {isES?"Ahora no":"Not now"}
@@ -219,26 +219,15 @@ function PaywallModal({type, onClose, lang}) {
 /* ─── STRIPE ──────────────────────────────────────────────── */
 const STRIPE_PK = "pk_test_51TcWZiCGqeJOlR1JLOOvKcpNeIa9ANXqInqgIHLIG09SAWFEXNx1t9mqwcPsr7YBh2VgUmtLlIXwtMFDbNVAPdro00fFpAhMl1";
 
-async function startCheckout(email) {
-  const r = await fetch('/api/stripe', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({action:'create-checkout', email})
-  });
-  const d = await r.json();
-  if(d.url) window.location.href = d.url;
+function startCheckout(email) {
+  // Direct Stripe Payment Link — no backend needed
+  const url = "https://buy.stripe.com/test_28E7sK6iL9xjbFW2Hia3u00" + (email ? "?prefilled_email=" + encodeURIComponent(email) : "");
+  window.open(url, "_blank");
 }
 
 async function checkPremium(email) {
-  try {
-    const r = await fetch('/api/stripe', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'check-subscription', email})
-    });
-    const d = await r.json();
-    return d.isPremium||false;
-  } catch { return false; }
+  // For now returns false — will be updated when Stripe webhook is configured
+  return false;
 }
 
 /* ─── HELPERS ─────────────────────────────────────────────── */
