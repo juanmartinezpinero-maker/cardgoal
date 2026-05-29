@@ -143,44 +143,13 @@ function jparse(raw) {
 }
 
 /* ─── AI ──────────────────────────────────────────────────── */
-const GEMINI_KEY = "AIzaSyAb8RN6J5QCFgISIiHo1CTZkbNTP5ABR3qgyJeWrwuyzy625mNg";
-
 async function callAI(msgs, search=false, maxTok=800) {
-  // Convert message format to Gemini format
-  const contents = msgs.map(msg => {
-    if(typeof msg.content === "string") {
-      return { role: msg.role==="assistant"?"model":"user", parts:[{text:msg.content}] };
-    }
-    const parts = msg.content.map(c => {
-      if(c.type==="text") return {text:c.text};
-      if(c.type==="image") return { inlineData:{ mimeType:c.source.media_type, data:c.source.data } };
-      return null;
-    }).filter(Boolean);
-    return { role:"user", parts };
-  });
-
-  const model = msgs.some(m=>Array.isArray(m.content)&&m.content.some(c=>c.type==="image"))
-    ? "gemini-1.5-flash"   // vision model for images
-    : search
-      ? "gemini-1.5-flash" // with search grounding
-      : "gemini-1.5-flash"; // fast model for text
-
-  const body = {
-    contents,
-    generationConfig: { maxOutputTokens: maxTok, temperature: 0.2 },
-  };
-
-  if(search) body.tools = [{googleSearch:{}}];
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
-  const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-
-  if(!r.ok) {
-    const e = await r.json().catch(()=>{});
-    throw new Error(e?.error?.message||`HTTP ${r.status}`);
-  }
+  const body = { model:"claude-opus-4-7", max_tokens:maxTok, messages:msgs };
+  if (search) body.tools = [{type:"web_search_20250305",name:"web_search"}];
+  const r = await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if (!r.ok) { const e=await r.json().catch(()=>{}); throw new Error(e?.error?.message||`HTTP ${r.status}`); }
   const d = await r.json();
-  return d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("\n")||"";
+  return d.content?.filter(b=>b.type==="text").map(b=>b.text).join("\n")||"";
 }
 
 /* ─── SEARCH — fast, no web search needed ─────────────────── */
