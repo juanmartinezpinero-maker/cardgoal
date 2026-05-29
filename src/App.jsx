@@ -68,11 +68,12 @@ const supa = {
     return r.json();
   },
 
-  async saveCard(card, token) {
+  async saveCard(card, token, userId) {
     const r = await fetch(`${SUPA_URL}/rest/v1/collections`, {
       method:"POST",
       headers:{...this.headers, "Authorization":`Bearer ${token}`, "Prefer":"return=representation"},
       body: JSON.stringify({
+        user_id: userId,
         player: card.player, team: card.team, season: card.season,
         manufacturer: card.manufacturer, collection: card.collection,
         card_number: card.cardNumber, rarity: card.rarity,
@@ -1684,8 +1685,14 @@ export default function CardGoal() {
     setCol(prev=>[...prev,newCard]);
     setAdded(prev=>new Set([...prev,uid]));
     // Save to Supabase if logged in
-    if(user?.token) {
-      try { await supa.saveCard(newCard, user.token); } catch {}
+    if(user?.token && user?.id) {
+      try {
+        const res = await supa.saveCard(newCard, user.token, user.id);
+        // Update _dbId with the real Supabase id for later deletion
+        if(res && res[0]?.id) {
+          setCol(prev=>prev.map(c=>c._uid===uid?{...c,_dbId:res[0].id}:c));
+        }
+      } catch(e) { console.error('saveCard error:', e); }
     }
   },[user]);
 
