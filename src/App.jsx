@@ -104,6 +104,33 @@ const supa = {
 const eur = n => { const v=parseFloat(n); if(!isFinite(v)) return "—"; return new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v); };
 const num = v => { const n=parseFloat(v); return isFinite(n)?n:null; };
 const toDataURL = f => new Promise((ok,ko) => { const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=ko; r.readAsDataURL(f); });
+
+// Compress image to max 1MB before sending to Gemini
+async function compressImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      // Max 800px on longest side
+      const max = 800;
+      if(w > max || h > max) {
+        if(w > h) { h = Math.round(h * max/w); w = max; }
+        else { w = Math.round(w * max/h); h = max; }
+      }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      // Compress to JPEG 0.7 quality
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      resolve(dataUrl);
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
 const sleep = ms => new Promise(r => setTimeout(r,ms));
 
 function jparse(raw) {
@@ -942,8 +969,10 @@ function GradeSheet({lang,setLang}) {
   const reset=()=>{setPh("idle");setDurl(null);setRes(null);setErr("");if(fileRef.current)fileRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
-    const d=await toDataURL(file);setDurl(d);setPh("grading");
-    try{const g=await gradeCard(d.split(",")[1],file.type,lang);setRes(g);setPh("result");}
+    const compressed = await compressImage(file);
+    const d = compressed || await toDataURL(file);
+    setDurl(d);setPh("grading");
+    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");}
     catch(e){setErr(e.message||"Error");setPh("error");}
   },[lang]);
 
@@ -1425,10 +1454,13 @@ function Scanner({onAdd, lang}) {
   const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);if(fileRef.current)fileRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
-    const d=await toDataURL(file);setDurl(d);setPh("scanning");setAdded(false);
+    // Compress image first to stay under Gemini 4MB limit
+    const compressed = await compressImage(file);
+    const d = compressed || await toDataURL(file);
+    setDurl(d);setPh("scanning");setAdded(false);
     try{
       const b64=d.split(",")[1];
-      const c=await scanCard(b64,file.type);setCard(c);setPh("pricing");
+      const c=await scanCard(b64,"image/jpeg");setCard(c);setPh("pricing");
       let p=null;try{p=await fetchPrice(c);}catch{}
       setPrice(p);setPh("result");
     }catch(e){setErr(e.message==="NO_CARD"?(isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card."):(isES?"No pude identificarla. Prueba con más luz.":"Couldn't identify it. Try better lighting."));setPh("error");}
