@@ -1,0 +1,39 @@
+module.exports = async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const stripe = require('stripe')(process.env.STRIPE_SK);
+  const { action, email, sessionId } = req.body;
+
+  try {
+    if (action === 'create-checkout') {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        mode: 'subscription',
+        customer_email: email,
+        line_items: [{ price: 'price_1TcWjaCGqeJOlR1Jt6k4EOqo', quantity: 1 }],
+        success_url: 'https://cardgoal.es?premium=success',
+        cancel_url: 'https://cardgoal.es?premium=cancel',
+        locale: 'es',
+      });
+      return res.status(200).json({ url: session.url });
+    }
+
+    if (action === 'check-subscription') {
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (!customers.data.length) return res.status(200).json({ isPremium: false });
+      const subs = await stripe.subscriptions.list({
+        customer: customers.data[0].id,
+        status: 'active',
+        limit: 1,
+      });
+      return res.status(200).json({ isPremium: subs.data.length > 0 });
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+};
