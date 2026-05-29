@@ -265,47 +265,43 @@ function searchCards(query) {
 }
 
 /* ─── PRICE — web search, called on demand ────────────────── */
+const priceCache = {};
+
 async function fetchPrice(card) {
+  // Cache key — same card always gets same price
+  const cacheKey = `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.season||""}`;
+  if (priceCache[cacheKey]) return priceCache[cacheKey];
+
   const raw = await callAI([{role:"user",content:
-`Eres un experto en cromos y cartas de fútbol coleccionables. Busca el precio real de mercado en EUR para esta carta:
+`Experto tasador de cromos de fútbol. Estima precio de mercado en EUR para:
 Jugador: ${card.player} | Marca: ${card.manufacturer||"?"} | Colección: ${card.collection||"?"} | Rareza: ${card.rarity||"Base"} | Temporada: ${card.season||"?"}
 
-Busca en TODAS estas fuentes por orden de prioridad:
-1. eBay España y eBay internacional (ventas completadas últimos 90 días) - convierte USD a EUR (x0.92)
-2. Cardmarket (si es una carta TCG)
-3. Todocoleccion.net (para cromos españoles, Mundicromo, Panini Liga, Megacracks, cromos antiguos)
-4. Wallapop (para cromos españoles de segunda mano)
+Basándote en eBay, Cardmarket, Todocoleccion.net y Wallapop.
+Para cromos españoles antiguos (Mundicromo, Megacracks, Panini Liga) usa precios del mercado español.
 
-Si es un cromo español antiguo (Mundicromo, Megacracks, Este, Panini Liga española), busca especialmente en Todocoleccion.net y Wallapop donde hay más oferta de este tipo.
-
-Devuelve SOLO JSON con el precio encontrado:
-{"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"Todocoleccion.net","changeWeek":0,"changeMonth":0}
-
-Si no encuentras precio en ninguna fuente, devuelve: {"priceEur":null}`
-  }], true, 400);
+SOLO JSON:
+{"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay/Todocoleccion","changeWeek":5,"changeMonth":10}`
+  }], false, 250);
   const p = jparse(raw);
   if (!p || !p.priceEur) {
-    // No price found — ask AI for an estimate based on card characteristics
+    // Expert estimate fallback
     const estRaw = await callAI([{role:"user",content:
-`Eres un experto tasador de cromos y cartas de fútbol coleccionables con 20 años de experiencia.
-No has encontrado precio de mercado para esta carta: ${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
-
-Haz una estimación del valor basándote en:
-- La importancia del jugador (leyenda, internacional, local)
-- La rareza y tipo de carta (holográfica, base, numerada)
-- La época (cromos vintage valen más)
-- El estado del mercado de cromos vintage españoles
-
-Devuelve SOLO JSON:
-{"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación experta CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
-    }], false, 300);
+`Tasador experto de cromos de fútbol. Estima valor orientativo para:
+${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
+Considera: importancia jugador, rareza, época, mercado español vintage.
+SOLO JSON: {"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación experta CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
+    }], false, 200);
     const est = jparse(estRaw);
     if (est && est.priceEur) {
-      return { priceEur:num(est.priceEur), priceMin:num(est.priceMin), pricePrem:num(est.pricePrem), priceSource:"⚡ Estimación experta (sin ventas recientes)", changeWeek:0, changeMonth:0, isEstimate:true };
+      const res = { priceEur:num(est.priceEur), priceMin:num(est.priceMin), pricePrem:num(est.pricePrem), priceSource:"⚡ Estimación experta", changeWeek:0, changeMonth:0, isEstimate:true };
+      priceCache[cacheKey] = res;
+      return res;
     }
     return null;
   }
-  return { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay/Todocoleccion", changeWeek:num(p.changeWeek)||0, changeMonth:num(p.changeMonth)||0 };
+  const result = { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay/Todocoleccion", changeWeek:num(p.changeWeek)||0, changeMonth:num(p.changeMonth)||0 };
+  priceCache[cacheKey] = result; // cache so same card always gets same price
+  return result;
 }
 
 /* ─── GENERATE CARD SVG ──────────────────────────────────────
@@ -1439,7 +1435,7 @@ function Scanner({onAdd, lang}) {
   },[lang]);
 
   if(ph==="idle")return(
-    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28,gap:16,background:C.bg}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28,gap:16,background:C.bg2}}>
       <div style={{fontSize:64}}>📷</div>
       <div style={{textAlign:"center"}}>
         <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>{isES?"Scanner IA":"AI Scanner"}</div>
@@ -1479,7 +1475,7 @@ function Scanner({onAdd, lang}) {
     const doAdd=()=>{if(added)return;onAdd({...card,...(price||{}),priceEur:p??null,price:p??null,scanned:true,_thumb:durl,_uid:`scan_${Date.now()}`});setAdded(true);};
     return(
       <div style={{flex:1,overflowY:"auto",background:C.bg,color:C.text}}>
-        <div style={{background:C.white,padding:"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{background:C.bg2,padding:"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
           <CardViz card={card} photo={durl} sz="xl"/>
           <div style={{textAlign:"center"}}>
             <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>{card.player}</div>
