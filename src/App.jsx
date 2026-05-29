@@ -273,11 +273,22 @@ async function fetchPrice(card) {
   if (priceCache[cacheKey]) return priceCache[cacheKey];
 
   const raw = await callAI([{role:"user",content:
-`Busca el precio real en EUR de esta carta de fútbol en eBay ventas completadas y Cardmarket:
-${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
-Para cromos españoles busca también en Todocoleccion.net y Wallapop.
-SOLO JSON: {"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay sold","changeWeek":5,"changeMonth":10}`
-  }], true, 300);
+`Busca el precio de mercado en EUR de esta carta de fútbol. 
+Carta: ${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
+
+INSTRUCCIONES IMPORTANTES:
+- Busca SOLO en eBay VENTAS COMPLETADAS (sold listings) de los últimos 90 días, NO precios de venta activos
+- Si es una carta PSA/BGS gradeada, busca el precio con ese grado específico
+- Si es carta sin gradear (raw), busca precio sin gradear
+- Para cromos españoles (Mundicromo, Panini Liga, Megacracks) busca en Todocoleccion.net vendidos
+- Calcula la MEDIANA de las ventas encontradas, no el máximo ni el mínimo
+- Convierte USD a EUR multiplicando por 0.92
+
+Devuelve SOLO este JSON con el precio mediano real:
+{"priceEur":250,"priceMin":180,"pricePrem":350,"priceSource":"eBay sold (5 ventas, mediana)","changeWeek":5,"changeMonth":10}
+
+Si no encuentras ventas reales recientes, devuelve: {"priceEur":null}`
+  }], true, 400);
   const p = jparse(raw);
   if (!p || !p.priceEur) {
     // Expert estimate fallback
