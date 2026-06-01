@@ -118,7 +118,7 @@ const supa = {
 };
 
 /* ─── FREEMIUM ────────────────────────────────────────────── */
-const LIMITS = { scans: 5, grades: 3, collection: 15 };
+const LIMITS = { scans: 1, grades: 1, collection: 15 }; // TEST: bajar a 1 para probar paywall
 
 function getUsage(userId) {
   try {
@@ -345,6 +345,185 @@ const CATALOG = [
   {player:"Robert Lewandowski",team:"FC Barcelona",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:8,priceMin:5,pricePrem:13,changeWeek:2,changeMonth:4},
   // Griezmann
   {player:"Antoine Griezmann",team:"Atlético Madrid",season:"2023-24",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Base",priceEur:5,priceMin:3,pricePrem:9,changeWeek:2,changeMonth:4},
+
+  // ── PANINI PRIZM 2024-25 ──────────────────────────────────
+  {player:"Rodri",team:"Manchester City",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:12,priceMin:8,pricePrem:18,changeWeek:8,changeMonth:25},
+  {player:"Rodri",team:"Manchester City",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Gold",cardNumber:"/10",priceEur:320,priceMin:240,pricePrem:450,changeWeek:10,changeMonth:30},
+  {player:"Phil Foden",team:"Manchester City",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:10,priceMin:7,pricePrem:16,changeWeek:4,changeMonth:10},
+  {player:"Phil Foden",team:"Manchester City",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Silver",priceEur:28,priceMin:20,pricePrem:42,changeWeek:5,changeMonth:12},
+  {player:"Bukayo Saka",team:"Arsenal",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:14,priceMin:10,pricePrem:22,changeWeek:6,changeMonth:15},
+  {player:"Bukayo Saka",team:"Arsenal",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:45,priceMin:32,pricePrem:65,changeWeek:8,changeMonth:22},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:15,priceMin:10,pricePrem:24,changeWeek:5,changeMonth:12},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:55,priceMin:38,pricePrem:78,changeWeek:12,changeMonth:40},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:18,priceMin:12,pricePrem:28,changeWeek:10,changeMonth:35},
+  {player:"Jamal Musiala",team:"Bayern Munich",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:16,priceMin:11,pricePrem:25,changeWeek:7,changeMonth:20},
+  {player:"Jamal Musiala",team:"Bayern Munich",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Silver",priceEur:42,priceMin:30,pricePrem:60,changeWeek:8,changeMonth:22},
+  {player:"Jamal Musiala",team:"Bayern Munich",season:"2022-23",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:80,priceMin:58,pricePrem:115,changeWeek:9,changeMonth:28},
+  {player:"Marcus Rashford",team:"Manchester United",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:8,priceMin:5,pricePrem:13,changeWeek:2,changeMonth:4},
+  {player:"Trent Alexander-Arnold",team:"Liverpool",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:10,priceMin:7,pricePrem:16,changeWeek:3,changeMonth:8},
+  {player:"Trent Alexander-Arnold",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:35,priceMin:25,pricePrem:52,changeWeek:15,changeMonth:50},
+  {player:"Federico Valverde",team:"Real Madrid",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:9,priceMin:6,pricePrem:14,changeWeek:3,changeMonth:7},
+  {player:"Andriy Lunin",team:"Real Madrid",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:4,changeMonth:15},
+  {player:"Dani Olmo",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:11,priceMin:7,pricePrem:17,changeWeek:8,changeMonth:25},
+  {player:"Dani Olmo",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:38,priceMin:27,pricePrem:55,changeWeek:10,changeMonth:30},
+  {player:"Raphinha",team:"FC Barcelona",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:9,priceMin:6,pricePrem:14,changeWeek:5,changeMonth:18},
+  {player:"Ferran Torres",team:"FC Barcelona",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:2,changeMonth:5},
+  {player:"Álvaro Morata",team:"Atlético Madrid",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:2,changeMonth:5},
+  {player:"Antoine Griezmann",team:"Atlético Madrid",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:8,priceMin:5,pricePrem:13,changeWeek:2,changeMonth:5},
+  {player:"Julian Alvarez",team:"Atlético Madrid",season:"2024-25",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:42,priceMin:30,pricePrem:62,changeWeek:12,changeMonth:38},
+  {player:"Cole Palmer",team:"Chelsea",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:18,priceMin:12,pricePrem:28,changeWeek:8,changeMonth:25},
+  {player:"Cole Palmer",team:"Chelsea",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Rookie",priceEur:75,priceMin:55,pricePrem:105,changeWeek:10,changeMonth:30},
+  {player:"Cole Palmer",team:"Chelsea",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Gold",cardNumber:"/10",priceEur:480,priceMin:350,pricePrem:650,changeWeek:12,changeMonth:35},
+  {player:"Declan Rice",team:"Arsenal",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:10,priceMin:7,pricePrem:16,changeWeek:3,changeMonth:8},
+  {player:"Martin Odegaard",team:"Arsenal",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:4,changeMonth:10},
+  {player:"Leroy Sane",team:"Bayern Munich",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:7,priceMin:5,pricePrem:11,changeWeek:2,changeMonth:4},
+  {player:"Harry Kane",team:"Bayern Munich",season:"2024-25",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:14,priceMin:9,pricePrem:22,changeWeek:4,changeMonth:10},
+  {player:"Serge Gnabry",team:"Bayern Munich",season:"2023-24",manufacturer:"Panini",collection:"Prizm",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:1,changeMonth:3},
+
+  // ── PANINI ADRENALYN XL 2024-25 ──────────────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:35,priceMin:25,pricePrem:52,changeWeek:15,changeMonth:45},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:22,priceMin:15,pricePrem:35,changeWeek:6,changeMonth:18},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:20,priceMin:14,pricePrem:30,changeWeek:5,changeMonth:15},
+  {player:"Erling Haaland",team:"Manchester City",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:18,priceMin:12,pricePrem:28,changeWeek:4,changeMonth:12},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:15,priceMin:10,pricePrem:24,changeWeek:5,changeMonth:14},
+  {player:"Pedri",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Base",priceEur:3,priceMin:1,pricePrem:6,changeWeek:2,changeMonth:5},
+  {player:"Gavi",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Base",priceEur:3,priceMin:1,pricePrem:6,changeWeek:2,changeMonth:4},
+  {player:"Rodri",team:"Manchester City",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:18,priceMin:12,pricePrem:28,changeWeek:8,changeMonth:22},
+  {player:"Cole Palmer",team:"Chelsea",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:14,priceMin:9,pricePrem:22,changeWeek:6,changeMonth:18},
+  {player:"Bukayo Saka",team:"Arsenal",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:12,priceMin:8,pricePrem:19,changeWeek:5,changeMonth:14},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:16,priceMin:10,pricePrem:25,changeWeek:10,changeMonth:30},
+  {player:"Jamal Musiala",team:"Bayern Munich",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:14,priceMin:9,pricePrem:22,changeWeek:7,changeMonth:20},
+  {player:"Dani Olmo",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:10,priceMin:6,pricePrem:16,changeWeek:8,changeMonth:24},
+  {player:"Alejandro Garnacho",team:"Manchester United",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Base",priceEur:4,priceMin:2,pricePrem:8,changeWeek:5,changeMonth:18},
+  {player:"Julián Álvarez",team:"Atlético Madrid",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:12,priceMin:8,pricePrem:19,changeWeek:10,changeMonth:30},
+  {player:"Antoine Griezmann",team:"Atlético Madrid",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Base",priceEur:4,priceMin:2,pricePrem:7,changeWeek:2,changeMonth:4},
+  {player:"Toni Kroos",team:"Real Madrid",season:"2023-24",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:12,priceMin:8,pricePrem:19,changeWeek:3,changeMonth:8},
+  {player:"Mohamed Salah",team:"Liverpool",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:12,priceMin:8,pricePrem:19,changeWeek:4,changeMonth:12},
+  {player:"Harry Kane",team:"Bayern Munich",season:"2024-25",manufacturer:"Panini",collection:"Adrenalyn XL",rarity:"Limited Edition",priceEur:10,priceMin:6,pricePrem:16,changeWeek:3,changeMonth:8},
+
+  // ── TOPPS MATCH ATTAX 2024-25 ────────────────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:25,priceMin:18,pricePrem:38,changeWeek:12,changeMonth:38},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:18,priceMin:12,pricePrem:28,changeWeek:6,changeMonth:18},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:15,priceMin:10,pricePrem:24,changeWeek:5,changeMonth:14},
+  {player:"Erling Haaland",team:"Manchester City",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:14,priceMin:9,pricePrem:22,changeWeek:4,changeMonth:12},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:12,priceMin:8,pricePrem:19,changeWeek:5,changeMonth:14},
+  {player:"Cole Palmer",team:"Chelsea",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:14,priceMin:9,pricePrem:22,changeWeek:8,changeMonth:24},
+  {player:"Bukayo Saka",team:"Arsenal",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:10,priceMin:6,pricePrem:16,changeWeek:5,changeMonth:14},
+  {player:"Rodri",team:"Manchester City",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:14,priceMin:9,pricePrem:22,changeWeek:7,changeMonth:20},
+  {player:"Harry Kane",team:"Bayern Munich",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:10,priceMin:6,pricePrem:16,changeWeek:3,changeMonth:8},
+  {player:"Mohamed Salah",team:"Liverpool",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:10,priceMin:6,pricePrem:16,changeWeek:4,changeMonth:12},
+  {player:"Pedri",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:2,changeMonth:5},
+  {player:"Gavi",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:1,changeMonth:3},
+  {player:"Alejandro Garnacho",team:"Manchester United",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"Base",priceEur:3,priceMin:1,pricePrem:6,changeWeek:5,changeMonth:18},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:12,priceMin:8,pricePrem:19,changeWeek:8,changeMonth:25},
+  {player:"Jamal Musiala",team:"Bayern Munich",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:10,priceMin:6,pricePrem:16,changeWeek:6,changeMonth:18},
+  {player:"Dani Olmo",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:8,priceMin:5,pricePrem:13,changeWeek:7,changeMonth:22},
+  {player:"Trent Alexander-Arnold",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"Match Attax",rarity:"100 Club",priceEur:15,priceMin:10,pricePrem:24,changeWeek:12,changeMonth:40},
+
+  // ── TOPPS CHROME UEFA 2024 ───────────────────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:22,priceMin:15,pricePrem:34,changeWeek:10,changeMonth:32},
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"Chrome",rarity:"Refractor",priceEur:65,priceMin:45,pricePrem:92,changeWeek:12,changeMonth:38},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:18,priceMin:12,pricePrem:28,changeWeek:5,changeMonth:14},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Refractor",priceEur:55,priceMin:38,pricePrem:78,changeWeek:6,changeMonth:16},
+  {player:"Kylian Mbappé",team:"PSG",season:"2022-23",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:14,priceMin:9,pricePrem:22,changeWeek:3,changeMonth:8},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:18,priceMin:12,pricePrem:28,changeWeek:5,changeMonth:14},
+  {player:"Erling Haaland",team:"Manchester City",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:16,priceMin:10,pricePrem:25,changeWeek:4,changeMonth:10},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Rookie",priceEur:48,priceMin:34,pricePrem:68,changeWeek:10,changeMonth:32},
+  {player:"Jamal Musiala",team:"Bayern Munich",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:14,priceMin:9,pricePrem:22,changeWeek:6,changeMonth:18},
+  {player:"Cole Palmer",team:"Chelsea",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Rookie",priceEur:55,priceMin:38,pricePrem:78,changeWeek:8,changeMonth:24},
+  {player:"Bukayo Saka",team:"Arsenal",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:5,changeMonth:14},
+  {player:"Pedri",team:"FC Barcelona",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:10,priceMin:6,pricePrem:16,changeWeek:3,changeMonth:8},
+  {player:"Gavi",team:"FC Barcelona",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:9,priceMin:6,pricePrem:14,changeWeek:2,changeMonth:6},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2023-24",manufacturer:"Topps",collection:"Chrome",rarity:"Base",priceEur:14,priceMin:9,pricePrem:22,changeWeek:5,changeMonth:14},
+
+  // ── PANINI LIGA ESTE (España) ────────────────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:5,priceMin:3,pricePrem:9,changeWeek:8,changeMonth:25},
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Idol",priceEur:28,priceMin:20,pricePrem:42,changeWeek:12,changeMonth:38},
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2023-24",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:3,priceMin:2,pricePrem:6,changeWeek:6,changeMonth:20},
+  {player:"Pedri",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:2,changeMonth:5},
+  {player:"Pedri",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Idol",priceEur:12,priceMin:8,pricePrem:19,changeWeek:3,changeMonth:8},
+  {player:"Gavi",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:1,changeMonth:3},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:3,priceMin:2,pricePrem:6,changeWeek:4,changeMonth:12},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Idol",priceEur:18,priceMin:12,pricePrem:28,changeWeek:6,changeMonth:18},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:4,priceMin:2,pricePrem:7,changeWeek:5,changeMonth:15},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Idol",priceEur:22,priceMin:15,pricePrem:34,changeWeek:6,changeMonth:18},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Idol",priceEur:16,priceMin:10,pricePrem:25,changeWeek:5,changeMonth:14},
+  {player:"Antoine Griezmann",team:"Atlético Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:1,changeMonth:3},
+  {player:"Julián Álvarez",team:"Atlético Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:3,priceMin:2,pricePrem:6,changeWeek:8,changeMonth:25},
+  {player:"Dani Olmo",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:3,priceMin:2,pricePrem:6,changeWeek:6,changeMonth:20},
+  {player:"Raphinha",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:4,changeMonth:15},
+  {player:"Robert Lewandowski",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:2,changeMonth:5},
+  {player:"Federico Valverde",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:2,changeMonth:5},
+
+  // ── PANINI MEGACRACKS 2024-25 ────────────────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"Base",priceEur:3,priceMin:2,pricePrem:6,changeWeek:8,changeMonth:25},
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:18,priceMin:12,pricePrem:28,changeWeek:10,changeMonth:30},
+  {player:"Pedri",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:2,changeMonth:5},
+  {player:"Pedri",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:10,priceMin:7,pricePrem:16,changeWeek:3,changeMonth:7},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:12,priceMin:8,pricePrem:19,changeWeek:4,changeMonth:12},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:14,priceMin:9,pricePrem:22,changeWeek:5,changeMonth:15},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:12,priceMin:8,pricePrem:19,changeWeek:4,changeMonth:12},
+  {player:"Gavi",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"Base",priceEur:2,priceMin:1,pricePrem:4,changeWeek:1,changeMonth:3},
+  {player:"Julián Álvarez",team:"Atlético Madrid",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:8,priceMin:5,pricePrem:13,changeWeek:7,changeMonth:22},
+  {player:"Dani Olmo",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:7,priceMin:4,pricePrem:12,changeWeek:6,changeMonth:18},
+
+  // ── PANINI SELECT 2023-24 ────────────────────────────────
+  {player:"Lionel Messi",team:"Inter Miami",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Concourse",priceEur:18,priceMin:12,pricePrem:28,changeWeek:3,changeMonth:8},
+  {player:"Lionel Messi",team:"Inter Miami",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Premier Level",priceEur:85,priceMin:60,pricePrem:120,changeWeek:5,changeMonth:12},
+  {player:"Cristiano Ronaldo",team:"Al-Nassr",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Concourse",priceEur:16,priceMin:10,pricePrem:25,changeWeek:2,changeMonth:6},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Concourse",priceEur:14,priceMin:9,pricePrem:22,changeWeek:5,changeMonth:14},
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Premier Level",priceEur:75,priceMin:52,pricePrem:108,changeWeek:12,changeMonth:38},
+  {player:"Erling Haaland",team:"Manchester City",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Concourse",priceEur:12,priceMin:8,pricePrem:19,changeWeek:4,changeMonth:10},
+  {player:"Kylian Mbappé",team:"PSG",season:"2022-23",manufacturer:"Panini",collection:"Select",rarity:"Premier Level",priceEur:95,priceMin:68,pricePrem:135,changeWeek:3,changeMonth:8},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2023-24",manufacturer:"Panini",collection:"Select",rarity:"Concourse",priceEur:12,priceMin:8,pricePrem:19,changeWeek:5,changeMonth:14},
+
+  // ── CROMOS CLÁSICOS ESPAÑOLES ────────────────────────────
+  {player:"Ronaldo Nazário",team:"FC Barcelona",season:"1996-97",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:45,priceMin:30,pricePrem:65,changeWeek:2,changeMonth:5},
+  {player:"Ronaldo Nazário",team:"Real Madrid",season:"2002-03",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:35,priceMin:22,pricePrem:52,changeWeek:1,changeMonth:4},
+  {player:"Ronaldinho",team:"FC Barcelona",season:"2004-05",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:40,priceMin:28,pricePrem:58,changeWeek:2,changeMonth:6},
+  {player:"Ronaldinho",team:"FC Barcelona",season:"2005-06",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:55,priceMin:38,pricePrem:78,changeWeek:2,changeMonth:5},
+  {player:"Iker Casillas",team:"Real Madrid",season:"2010-11",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:1,changeMonth:3},
+  {player:"Iker Casillas",team:"Real Madrid",season:"2012-13",manufacturer:"Panini",collection:"Megacracks",rarity:"Base",priceEur:8,priceMin:5,pricePrem:13,changeWeek:1,changeMonth:2},
+  {player:"Xavi Hernández",team:"FC Barcelona",season:"2009-10",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:15,priceMin:10,pricePrem:24,changeWeek:1,changeMonth:3},
+  {player:"Andrés Iniesta",team:"FC Barcelona",season:"2009-10",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:14,priceMin:9,pricePrem:22,changeWeek:1,changeMonth:3},
+  {player:"Andrés Iniesta",team:"FC Barcelona",season:"2010-11",manufacturer:"Panini",collection:"Megacracks",rarity:"MegaCrack",priceEur:22,priceMin:15,pricePrem:34,changeWeek:1,changeMonth:4},
+  {player:"Sergio Ramos",team:"Real Madrid",season:"2011-12",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:1,changeMonth:3},
+  {player:"Fernando Torres",team:"Atlético Madrid",season:"2002-03",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:18,priceMin:12,pricePrem:28,changeWeek:1,changeMonth:4},
+  {player:"David Villa",team:"Valencia CF",season:"2005-06",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:10,priceMin:7,pricePrem:16,changeWeek:1,changeMonth:3},
+  {player:"Raúl González",team:"Real Madrid",season:"2000-01",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:20,priceMin:14,pricePrem:30,changeWeek:1,changeMonth:3},
+  {player:"Samuel Eto'o",team:"FC Barcelona",season:"2005-06",manufacturer:"Panini",collection:"Liga Este",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:1,changeMonth:3},
+
+  // ── PANINI UEFA CHAMPIONS LEAGUE 2024-25 ─────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:8,priceMin:5,pricePrem:13,changeWeek:8,changeMonth:25},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:5,changeMonth:14},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:4,changeMonth:12},
+  {player:"Erling Haaland",team:"Manchester City",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:3,changeMonth:8},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:5,priceMin:3,pricePrem:9,changeWeek:4,changeMonth:12},
+  {player:"Rodri",team:"Manchester City",season:"2023-24",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:6,changeMonth:18},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:8,changeMonth:24},
+  {player:"Cole Palmer",team:"Chelsea",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:6,changeMonth:18},
+  {player:"Phil Foden",team:"Manchester City",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:5,priceMin:3,pricePrem:9,changeWeek:3,changeMonth:8},
+  {player:"Bukayo Saka",team:"Arsenal",season:"2024-25",manufacturer:"Panini",collection:"Champions League",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:4,changeMonth:12},
+
+  // ── TOPPS UEFA CHAMPIONS LEAGUE 2024-25 ──────────────────
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Base",priceEur:10,priceMin:6,pricePrem:16,changeWeek:8,changeMonth:25},
+  {player:"Lamine Yamal",team:"FC Barcelona",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Gold",priceEur:45,priceMin:32,pricePrem:65,changeWeek:10,changeMonth:30},
+  {player:"Jude Bellingham",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Base",priceEur:8,priceMin:5,pricePrem:13,changeWeek:5,changeMonth:14},
+  {player:"Kylian Mbappé",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:4,changeMonth:12},
+  {player:"Erling Haaland",team:"Manchester City",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:3,changeMonth:8},
+  {player:"Vinicius Jr.",team:"Real Madrid",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Base",priceEur:6,priceMin:4,pricePrem:10,changeWeek:4,changeMonth:12},
+  {player:"Florian Wirtz",team:"Bayer Leverkusen",season:"2024-25",manufacturer:"Topps",collection:"UCL",rarity:"Base",priceEur:7,priceMin:4,pricePrem:12,changeWeek:8,changeMonth:24},
+
+  // ── PANINI WORLD CUP 2022 ────────────────────────────────
+  {player:"Lionel Messi",team:"Argentina",season:"2022",manufacturer:"Panini",collection:"World Cup",rarity:"Base",priceEur:15,priceMin:10,pricePrem:24,changeWeek:3,changeMonth:8},
+  {player:"Lionel Messi",team:"Argentina",season:"2022",manufacturer:"Panini",collection:"World Cup",rarity:"Gold",priceEur:120,priceMin:85,pricePrem:170,changeWeek:4,changeMonth:10},
+  {player:"Kylian Mbappé",team:"France",season:"2022",manufacturer:"Panini",collection:"World Cup",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:3,changeMonth:7},
+  {player:"Cristiano Ronaldo",team:"Portugal",season:"2022",manufacturer:"Panini",collection:"World Cup",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:2,changeMonth:5},
+  {player:"Lamine Yamal",team:"Spain",season:"2024",manufacturer:"Panini",collection:"Euro",rarity:"Base",priceEur:18,priceMin:12,pricePrem:28,changeWeek:8,changeMonth:25},
+  {player:"Jude Bellingham",team:"England",season:"2024",manufacturer:"Panini",collection:"Euro",rarity:"Base",priceEur:10,priceMin:6,pricePrem:16,changeWeek:4,changeMonth:12},
+  {player:"Rodri",team:"Spain",season:"2024",manufacturer:"Panini",collection:"Euro",rarity:"Base",priceEur:12,priceMin:8,pricePrem:19,changeWeek:6,changeMonth:18},
+  {player:"Florian Wirtz",team:"Germany",season:"2024",manufacturer:"Panini",collection:"Euro",rarity:"Base",priceEur:10,priceMin:6,pricePrem:16,changeWeek:7,changeMonth:22},
+  {player:"Jamal Musiala",team:"Germany",season:"2024",manufacturer:"Panini",collection:"Euro",rarity:"Base",priceEur:9,priceMin:6,pricePrem:14,changeWeek:5,changeMonth:16},
 ];
 
 function searchCards(query) {
@@ -1962,3 +2141,4 @@ export default function CardGoal() {
     </div>
   );
 }
+
