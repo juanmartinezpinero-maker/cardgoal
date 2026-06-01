@@ -1781,8 +1781,20 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
       {!isPremium&&userId&&(()=>{
         const u=getUsage(userId);
         const left=Math.max(0,LIMITS.scans-u.scans);
-        return <div style={{background:left>0?C.accentL:"rgba(255,82,82,0.12)",border:`1px solid ${left>0?C.accent:C.red}44`,borderRadius:10,padding:"8px 16px",fontSize:12,color:left>0?C.accent:C.red,fontWeight:600}}>
-          {left>0?(isES?`${left} escaneos gratuitos restantes este mes`:`${left} free scans left this month`):(isES?"Sin escaneos gratuitos — actualiza a Premium":"No free scans left — upgrade to Premium")}
+        if(left>0) return <div style={{background:C.accentL,border:`1px solid ${C.accent}44`,borderRadius:10,padding:"8px 16px",fontSize:12,color:C.accent,fontWeight:600}}>
+          {isES?`${left} escaneos gratuitos restantes este mes`:`${left} free scans left this month`}
+        </div>;
+        // No scans left — show upgrade block
+        return <div style={{background:"rgba(255,82,82,0.08)",border:`1px solid ${C.red}44`,borderRadius:14,padding:"16px",textAlign:"center",width:"100%",maxWidth:280}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.red,marginBottom:4}}>
+            {isES?"Has agotado tus escaneos gratuitos":"You've used all free scans"}
+          </div>
+          <div style={{fontSize:11,color:C.sub,marginBottom:12}}>
+            {isES?"Activa Premium para escaneos ilimitados":"Activate Premium for unlimited scans"}
+          </div>
+          <button onClick={()=>startCheckout(window._cgUserEmail||"")} style={{width:"100%",padding:"12px",background:C.accent,border:"none",borderRadius:12,fontFamily:FD,fontSize:14,fontWeight:800,color:C.bg,cursor:"pointer"}}>
+            💳 {isES?"Activar Premium — 2,95€/mes":"Activate Premium — €2.95/mo"}
+          </button>
         </div>;
       })()}
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>process(e.target.files?.[0])}/>
@@ -2141,4 +2153,3 @@ export default function CardGoal() {
     </div>
   );
 }
-
