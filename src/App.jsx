@@ -118,7 +118,7 @@ const supa = {
 };
 
 /* ─── FREEMIUM ────────────────────────────────────────────── */
-const LIMITS = { scans: 1, grades: 1, collection: 15 }; // TEST: bajar a 1 para probar paywall
+const LIMITS = { scans: 5, grades: 3, collection: 15 };
 
 function getUsage(userId) {
   try {
