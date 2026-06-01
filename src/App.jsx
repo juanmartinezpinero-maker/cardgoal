@@ -1878,7 +1878,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
 }
 
 /* COLLECTION */
-function Collection({col, nav, onTap, lang}) {
+function Collection({col, nav, onTap, lang, onUpdatePrices}) {
   const [filt,setFilt]=useState("all");
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
@@ -1906,9 +1906,14 @@ function Collection({col, nav, onTap, lang}) {
       {/* Header */}
       <div style={{background:C.white,borderBottom:`1px solid ${C.border}`,flexShrink:0,padding:"14px 18px 10px"}}>
         <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>{isES?"Mi Colección":"My Collection"}</div>
-        <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:4}}>
-          <span style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent}}>{eur(total)}</span>
-          <span style={{fontSize:13,color:C.sub}}>{col.length} {isES?"cartas":"cards"}</span>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
+          <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+            <span style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent}}>{eur(total)}</span>
+            <span style={{fontSize:13,color:C.sub}}>{col.length} {isES?"cartas":"cards"}</span>
+          </div>
+          {onUpdatePrices&&<button onClick={onUpdatePrices} style={{padding:"6px 12px",background:C.bg2,border:`1px solid ${C.border}`,borderRadius:10,fontSize:11,fontWeight:700,color:C.accent,cursor:"pointer",fontFamily:FD,display:"flex",alignItems:"center",gap:5}}>
+            🔄 {isES?"Actualizar":"Update"}
+          </button>}
         </div>
         <div style={{display:"flex",gap:6,marginTop:10}}>
           {FILTERS.map(([l,v])=>(
@@ -2057,6 +2062,27 @@ export default function CardGoal() {
     }
   },[user,col]);
 
+  const [updatingPrices, setUpdatingPrices] = useState(false);
+
+  const handleUpdatePrices = useCallback(async () => {
+    if(updatingPrices || col.length === 0) return;
+    setUpdatingPrices(true);
+    try {
+      const updated = [...col];
+      for(let i = 0; i < updated.length; i++) {
+        const card = updated[i];
+        const newPrice = await fetchPrice(card).catch(()=>null);
+        if(newPrice) {
+          updated[i] = {...card, ...newPrice};
+        }
+        // Small delay to avoid rate limiting
+        await new Promise(r=>setTimeout(r,500));
+      }
+      setCol(updated);
+    } catch(e) { console.error(e); }
+    setUpdatingPrices(false);
+  },[col, updatingPrices]);
+
   const addAlert = useCallback((card, targetPrice) => {
     setPriceAlerts(prev=>[...prev, {card, targetPrice, _uid:`alert_${Date.now()}`}]);
   },[]);
@@ -2111,7 +2137,7 @@ export default function CardGoal() {
               {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
               {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
-              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang}/>}
+              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang} onUpdatePrices={handleUpdatePrices}/>}
               {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")}/>}
             </>
           )}
