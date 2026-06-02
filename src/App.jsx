@@ -1847,13 +1847,15 @@ function Search({onAdd, addedIds, onTap, lang}) {
                   {card.rarity&&card.rarity!=="Base"&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.goldL,color:C.gold,border:`1px solid ${C.gold}44`}}>★ {card.rarity}</span>}
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                  <div style={{fontSize:11,color:C.accent,fontWeight:600}}>👆 {isES?"Toca para estadísticas":"Tap for stats"}</div>
-                  {card.priceEur&&<div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{eur(card.priceEur)}</div>}
+                  <div style={{fontSize:11,color:C.accent,fontWeight:600}}>👆 {isES?"Toca para valor real":"Tap for real value"}</div>
+                  {card._fromEbay
+                    ? (card.priceEur!=null&&<div style={{fontSize:11,color:C.sub,fontWeight:600}}>{isES?"Anuncio eBay":"eBay listing"}: {eur(card.priceEur)}</div>)
+                    : (card.priceEur&&<div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{eur(card.priceEur)}</div>)}
                 </div>
               </div>
               {/* Add */}
               <div style={{padding:"10px 16px 14px"}}>
-                <button onClick={()=>onAdd({...card})} disabled={isAdded} style={{width:"100%",padding:"12px",background:isAdded?C.accentL:C.accent,border:isAdded?`1.5px solid ${C.accent}`:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:isAdded?C.accent:"#fff",cursor:isAdded?"default":"pointer",transition:"all .2s"}}>
+                <button onClick={()=>onAdd(card._fromEbay?{...card,priceEur:null,price:null}:{...card})} disabled={isAdded} style={{width:"100%",padding:"12px",background:isAdded?C.accentL:C.accent,border:isAdded?`1.5px solid ${C.accent}`:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:isAdded?C.accent:"#fff",cursor:isAdded?"default":"pointer",transition:"all .2s"}}>
                   {isAdded?(isES?"✓ En tu colección":"✓ In collection"):(isES?"+ Añadir a colección":"+ Add to collection")}
                 </button>
               </div>
