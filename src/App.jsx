@@ -587,15 +587,25 @@ function searchCards(query) {
 const priceCache = {};
 
 async function fetchPrice(card) {
-  // Cache key — same card always gets same price
-  const cacheKey = `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.season||""}`;
+  // Para cartas de eBay usamos el título completo del anuncio (trae Auto, /99, Relic, etc.)
+  const desc = card._ebayTitle
+    ? card._ebayTitle
+    : `${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}`;
+  // Precio del anuncio activo como referencia (si viene de eBay)
+  const listingHint = (card._fromEbay && num(card.priceEur)!=null)
+    ? `\nReferencia: hay un anuncio ACTIVO de esta carta pedido a ${num(card.priceEur)}€ (es precio de venta, no de venta cerrada).`
+    : "";
+
+  // Cache key
+  const cacheKey = card._ebayTitle ? `ebay:${desc}` : `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.season||""}`;
   if (priceCache[cacheKey]) return priceCache[cacheKey];
 
   const raw = await callAI([{role:"user",content:
-`Busca el precio de mercado en EUR de esta carta de fútbol. 
-Carta: ${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
+`Busca el precio de mercado en EUR de esta carta de fútbol.
+Carta: ${desc}${listingHint}
 
 INSTRUCCIONES IMPORTANTES:
+- Identifica bien el tipo de carta: si el título indica AUTO/autograph, RELIC/patch, numerada (/99, /25, /10), Rookie (RC), refractor, etc., valórala como tal — esas valen MUCHO más que una base.
 - Busca SOLO en eBay VENTAS COMPLETADAS (sold listings) de los últimos 90 días, NO precios de venta activos
 - Si es una carta PSA/BGS gradeada, busca el precio con ese grado específico
 - Si es carta sin gradear (raw), busca precio sin gradear
@@ -613,7 +623,8 @@ Si no encuentras ventas reales recientes, devuelve: {"priceEur":null}`
     // Expert estimate fallback
     const estRaw = await callAI([{role:"user",content:
 `Tasador experto de cromos de fútbol. Estima valor orientativo para:
-${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}
+${desc}${listingHint}
+Ten muy en cuenta si es Auto, Relic/Patch, numerada (/99, /25...), Rookie (RC) o refractor: esas valen mucho más que una base.
 Considera: importancia jugador, rareza, época, mercado español vintage.
 SOLO JSON: {"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación experta CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
     }], false, 200);
@@ -922,18 +933,28 @@ async function ebaySearchCards(query) {
     if (!r.ok) return [];
     const data = await r.json();
     const list = (data.results || []).filter(it => it.image && !EBAY_BAD.test(it.title || ""));
-    return list.slice(0, 6).map((it, i) => ({
-      player: titleCase(query),
-      team: "", season: "", manufacturer: "", collection: "", rarity: "Base",
-      priceEur: it.price ?? null,
-      price: it.price ?? null,
-      _ebayImg: it.image,
-      _ebayTitle: it.title,
-      _ebayUrl: it.url,
-      _priceSource: "eBay (anuncio activo)",
-      _fromEbay: true,
-      _uid: `ebay_${Date.now()}_${i}`,
-    }));
+    return list.slice(0, 6).map((it, i) => {
+      const T = (it.title || "").toLowerCase();
+      let rarity = "Base";
+      if (/auto|autograph|firmad/.test(T)) rarity = "Auto";
+      else if (/relic|patch|jersey|worn|memorabilia/.test(T)) rarity = "Relic";
+      else if (/\/\d{1,3}\b|numbered|numerad/.test(T)) rarity = "Numbered";
+      else if (/rookie|\brc\b/.test(T)) rarity = "Rookie";
+      else if (/refractor|prizm|holo|silver|gold|mosaic/.test(T)) rarity = "Parallel";
+      const manufacturer = /topps/.test(T) ? "Topps" : /panini/.test(T) ? "Panini" : "";
+      return {
+        player: titleCase(query),
+        team: "", season: "", manufacturer, collection: "", rarity,
+        priceEur: it.price ?? null,
+        price: it.price ?? null,
+        _ebayImg: it.image,
+        _ebayTitle: it.title,
+        _ebayUrl: it.url,
+        _priceSource: "eBay (anuncio activo)",
+        _fromEbay: true,
+        _uid: `ebay_${Date.now()}_${i}`,
+      };
+    });
   } catch {
     return [];
   }
