@@ -854,23 +854,51 @@ function teamColors(team="") {
 const ebayCache = {};
 const EBAY_BAD = /camiseta|t-?shirt|shirt|jersey|firmad|signed|autograph|enmarcad|framed|p[oó]ster|poster|funda|sleeve|figur|mug|taza|bal[oó]n|botas|boots|album completo|sobre cerrad|booster|caja|box|lote de|bufanda|scarf/i;
 
+const enorm = (s) => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+// Token más significativo (palabra más larga) de un texto
+const bigToken = (s) => enorm(s).split(/\s+/).filter(w=>w.length>2).sort((a,b)=>b.length-a.length)[0] || "";
+
 async function fetchEbayCard(card) {
   const key = `${card.player||""}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||""}|${card.season||""}`;
   if (ebayCache[key] !== undefined) return ebayCache[key];
 
-  // Búsqueda específica: jugador + marca + colección + temporada
-  const q = [card.player, card.manufacturer, card.collection, card.season]
-    .filter(Boolean).join(" ").trim() || (card.player || "");
-  if (!q) { ebayCache[key] = null; return null; }
+  // Búsqueda dirigida: jugador + colección + equipo (para acertar la variante)
+  const q = [card.player, card.collection, card.team].filter(Boolean).join(" ").trim() || (card.player || "");
+  if (!card.player) { ebayCache[key] = null; return null; }
+
+  // Tokens para verificar que la foto encaja con ESTE cromo
+  const playerLast = enorm(card.player).split(/\s+/).slice(-1)[0] || "";
+  const manuf  = enorm(card.manufacturer);
+  const collTk = bigToken(card.collection);
+  const teamTk = bigToken(card.team);
+  const yearTk = (card.season||"").match(/\d{4}/)?.[0] || "";
 
   try {
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(q)}`);
     if (!r.ok) { ebayCache[key] = null; return null; }
     const data = await r.json();
-    const list = (data.results || []).filter(it => it.image && !EBAY_BAD.test(it.title || ""));
-    const best = list[0]
-      || ((data.best && data.best.image && !EBAY_BAD.test(data.best.title || "")) ? data.best : null);
-    const out = best ? { image: best.image, price: best.price, url: best.url, title: best.title } : null;
+
+    let best = null, bestScore = -1;
+    for (const it of (data.results || [])) {
+      if (!it.image) continue;
+      const t = enorm(it.title);
+      if (EBAY_BAD.test(it.title||"")) continue;
+      if (playerLast && !t.includes(playerLast)) continue; // el jugador es obligatorio
+
+      let score = 0;
+      if (manuf  && t.includes(manuf))  score += 1;
+      if (collTk && t.includes(collTk)) score += 1;
+      if (teamTk && t.includes(teamTk)) score += 3; // el equipo es el que desempata
+      if (yearTk && t.includes(yearTk)) score += 1;
+      if (score > bestScore) { bestScore = score; best = it; }
+    }
+
+    // Umbral: si el cromo tiene equipo, exigimos que coincida (evita poner
+    // un Ronaldo de Portugal cuando el cromo es del Al-Nassr).
+    const required = teamTk ? 3 : 1;
+    const out = (best && bestScore >= required)
+      ? { image: best.image, price: best.price, url: best.url, title: best.title }
+      : null;
     ebayCache[key] = out;
     return out;
   } catch {
@@ -884,7 +912,7 @@ async function fetchEbayCard(card) {
    Si no, intenta la foto real de eBay.
    Si tampoco hay -> dibuja el cromo en SVG (fallback de siempre).
 ──────────────────────────────────────────────────────────────── */
-function CardViz({ card={}, photo=null, sz="md", ebay=true }) {
+function CardViz({ card={}, photo=null, sz="md", ebay=false }) {
   const [ebayImg, setEbayImg] = useState(null);
 
   useEffect(() => {
@@ -1770,7 +1798,7 @@ function Search({onAdd, addedIds, onTap, lang}) {
             <div key={card._uid} style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,overflow:"hidden",marginBottom:14,boxShadow:C.shadow}}>
               {/* Card visual */}
               <div onClick={()=>onTap({...card})} style={{display:"flex",justifyContent:"center",padding:"20px 16px 14px",background:`linear-gradient(180deg,${C.bg},${C.white})`,cursor:"pointer"}}>
-                <CardViz card={card} sz="xl"/>
+                <CardViz card={card} sz="xl" ebay={true}/>
               </div>
               {/* Info */}
               <div style={{padding:"10px 16px 0"}}>
@@ -1936,7 +1964,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
 }
 
 /* COLLECTION */
-function Collection({col, nav, onTap, lang, onUpdatePrices, isUpdating}) {
+function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating}) {
   const [filt,setFilt]=useState("all");
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
@@ -2007,9 +2035,20 @@ function Collection({col, nav, onTap, lang, onUpdatePrices, isUpdating}) {
             const wk=num(card.changeWeek);
             return(
               <div key={card._uid||i} onClick={()=>onTap({...card})}
-                style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,overflow:"hidden",cursor:"pointer",boxShadow:C.shadow,transition:"box-shadow .15s,transform .1s"}}
+                style={{position:"relative",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:16,overflow:"hidden",cursor:"pointer",boxShadow:C.shadow,transition:"box-shadow .15s,transform .1s"}}
                 onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.shadowM;e.currentTarget.style.transform="scale(1.02)";}}
                 onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.shadow;e.currentTarget.style.transform="scale(1)";}}>
+                {onRemove&&<button
+                  onClick={(e)=>{
+                    e.stopPropagation();
+                    if(window.confirm(isES?`¿Quitar "${card.player||"esta carta"}" de tu colección?`:`Remove "${card.player||"this card"}" from your collection?`)){
+                      onRemove(card._uid);
+                    }
+                  }}
+                  title={isES?"Quitar de la colección":"Remove from collection"}
+                  style={{position:"absolute",top:6,right:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.6)",color:C.red,fontSize:14,fontWeight:800,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
+                  ✕
+                </button>}
                 <div style={{display:"flex",justifyContent:"center",padding:"12px 10px 8px",background:`linear-gradient(180deg,${C.bg},${C.white})`}}>
                   <CardViz card={card} photo={card._thumb||null} sz="md"/>
                 </div>
@@ -2229,7 +2268,7 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
               {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
               {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
-              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices}/>}
+              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices}/>}
               {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")}/>}
             </>
           )}
