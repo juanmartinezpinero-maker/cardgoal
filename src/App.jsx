@@ -881,22 +881,27 @@ async function fetchEbayCard(card) {
     let best = null, bestScore = -1;
     for (const it of (data.results || [])) {
       if (!it.image) continue;
-      const t = enorm(it.title);
       if (EBAY_BAD.test(it.title||"")) continue;
-      if (playerLast && !t.includes(playerLast)) continue; // el jugador es obligatorio
+      const t = enorm(it.title);
 
+      // Requisitos OBLIGATORIOS para aceptar la foto como "este cromo":
+      const okPlayer = playerLast && t.includes(playerLast);
+      const okTeam   = !teamTk || t.includes(teamTk);            // si el cromo tiene equipo, debe aparecer
+      const okLine   = (!manuf && !collTk)                       // si no hay marca/colección, se ignora
+                       || (manuf  && t.includes(manuf))
+                       || (collTk && t.includes(collTk));
+      if (!okPlayer || !okTeam || !okLine) continue;             // descarta si falla cualquiera
+
+      // Entre las válidas, elige la que más datos comparte (mejor variante)
       let score = 0;
       if (manuf  && t.includes(manuf))  score += 1;
       if (collTk && t.includes(collTk)) score += 1;
-      if (teamTk && t.includes(teamTk)) score += 3; // el equipo es el que desempata
+      if (teamTk && t.includes(teamTk)) score += 2;
       if (yearTk && t.includes(yearTk)) score += 1;
       if (score > bestScore) { bestScore = score; best = it; }
     }
 
-    // Umbral: si el cromo tiene equipo, exigimos que coincida (evita poner
-    // un Ronaldo de Portugal cuando el cromo es del Al-Nassr).
-    const required = teamTk ? 3 : 1;
-    const out = (best && bestScore >= required)
+    const out = best
       ? { image: best.image, price: best.price, url: best.url, title: best.title }
       : null;
     ebayCache[key] = out;
@@ -907,30 +912,57 @@ async function fetchEbayCard(card) {
   }
 }
 
+/* Búsqueda directa en eBay cuando el catálogo no tiene el cromo.
+   Devuelve los anuncios como tarjetas con foto y precio reales. */
+const titleCase = (s) => (s||"").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+async function ebaySearchCards(query) {
+  try {
+    const r = await fetch(`/api/ebay?q=${encodeURIComponent(query)}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    const list = (data.results || []).filter(it => it.image && !EBAY_BAD.test(it.title || ""));
+    return list.slice(0, 6).map((it, i) => ({
+      player: titleCase(query),
+      team: "", season: "", manufacturer: "", collection: "", rarity: "Base",
+      priceEur: it.price ?? null,
+      price: it.price ?? null,
+      _ebayImg: it.image,
+      _ebayTitle: it.title,
+      _ebayUrl: it.url,
+      _priceSource: "eBay (anuncio activo)",
+      _fromEbay: true,
+      _uid: `ebay_${Date.now()}_${i}`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /* ─── CARD VISUAL ─────────────────────────────────────────────
    Si hay foto de scanner -> la muestra.
    Si no, intenta la foto real de eBay.
    Si tampoco hay -> dibuja el cromo en SVG (fallback de siempre).
 ──────────────────────────────────────────────────────────────── */
-function CardViz({ card={}, photo=null, sz="md", ebay=false }) {
+function CardViz({ card={}, photo=null, sz="md", ebay=false, imgUrl=null }) {
   const [ebayImg, setEbayImg] = useState(null);
 
   useEffect(() => {
     let alive = true;
     setEbayImg(null);
     const isScan = photo && photo.startsWith("data:");
-    if (!isScan && ebay && card && card.player) {
+    if (!isScan && !imgUrl && ebay && card && card.player) {
       fetchEbayCard(card).then(r => { if (alive && r && r.image) setEbayImg(r.image); });
     }
     return () => { alive = false; };
-  }, [card?.player, card?.manufacturer, card?.collection, card?.season, photo, ebay]);
+  }, [card?.player, card?.manufacturer, card?.collection, card?.season, photo, ebay, imgUrl]);
 
   const series  = getSeries(card.manufacturer, card.collection);
   const rs      = RARITY_STYLE(card.rarity||"");
   const jersey  = jnum(card.player||"");
   const [c1,c2,c3] = teamColors(card.team||"");
   const isScan  = photo && photo.startsWith("data:");
-  const img     = isScan ? photo : ebayImg;   // foto scanner o foto real de eBay
+  const img     = isScan ? photo : (imgUrl || ebayImg);   // foto scanner, listado eBay directo, o eBay autodetectado
   const imgFit  = isScan ? "cover" : "contain"; // eBay: mostrar cromo entero sin recortar
   const player  = card.player||"—";
   const initials= player.split(" ").map(w=>w[0]||"").join("").slice(0,2).toUpperCase();
@@ -1219,7 +1251,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
         {/* Card + price hero */}
         <div style={{background:`linear-gradient(180deg,${C.bg},${C.white})`,padding:"16px 18px",display:"flex",gap:16,alignItems:"flex-start"}}>
           <div style={{flexShrink:0}}>
-            <CardViz card={card} photo={card._thumb||null} sz="lg"/>
+            <CardViz card={card} photo={card._thumb||null} sz="lg" imgUrl={card._fromEbay?card._ebayImg:null}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{t.price}</div>
@@ -1736,14 +1768,16 @@ function Search({onAdd, addedIds, onTap, lang}) {
   const isES = lang==="es";
   useEffect(()=>{ setTimeout(()=>ref.current?.focus(),80); },[]);
 
-  const go = () => {
+  const go = async () => {
     const query=q.trim(); if(!query) return;
     setSt("loading"); setCards([]);
-    setTimeout(() => {
-      const r = searchCards(query);
-      if(!r.length) { setSt("empty"); return; }
-      setCards(r); setSt("done");
-    }, 0);
+    // 1) Catálogo interno (instantáneo)
+    const local = searchCards(query);
+    if(local.length){ setCards(local); setSt("done"); return; }
+    // 2) Si no está en el catálogo, buscar en eBay
+    const eb = await ebaySearchCards(query);
+    if(eb.length){ setCards(eb); setSt("done"); return; }
+    setSt("empty");
   };
 
   const CHIPS = ["Yamal 2024","Bellingham Prizm","Mbappé Chrome","Pedri Adrenalyn","Haaland auto","Vinicius /25","Messi Topps","Ronaldo Panini"];
@@ -1798,13 +1832,16 @@ function Search({onAdd, addedIds, onTap, lang}) {
             <div key={card._uid} style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,overflow:"hidden",marginBottom:14,boxShadow:C.shadow}}>
               {/* Card visual */}
               <div onClick={()=>onTap({...card})} style={{display:"flex",justifyContent:"center",padding:"20px 16px 14px",background:`linear-gradient(180deg,${C.bg},${C.white})`,cursor:"pointer"}}>
-                <CardViz card={card} sz="xl" ebay={true}/>
+                <CardViz card={card} sz="xl" ebay={!card._fromEbay} imgUrl={card._fromEbay?card._ebayImg:null}/>
               </div>
               {/* Info */}
               <div style={{padding:"10px 16px 0"}}>
                 <div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{card.player}</div>
-                <div style={{fontSize:13,color:C.sub,marginTop:2}}>{card.team}{card.season?` · ${card.season}`:""}</div>
+                {card._fromEbay
+                  ? <div style={{fontSize:11,color:C.sub,marginTop:2,lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{card._ebayTitle}</div>
+                  : <div style={{fontSize:13,color:C.sub,marginTop:2}}>{card.team}{card.season?` · ${card.season}`:""}</div>}
                 <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                  {card._fromEbay&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.blueL,color:C.blue,border:`1px solid ${C.blue}44`}}>eBay</span>}
                   {card.manufacturer&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.bg,color:C.sub,border:`1px solid ${C.border}`}}>{card.manufacturer}</span>}
                   {card.collection&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.bg,color:C.sub,border:`1px solid ${C.border}`}}>{card.collection}</span>}
                   {card.rarity&&card.rarity!=="Base"&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.goldL,color:C.gold,border:`1px solid ${C.gold}44`}}>★ {card.rarity}</span>}
@@ -2050,7 +2087,7 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
                   ✕
                 </button>}
                 <div style={{display:"flex",justifyContent:"center",padding:"12px 10px 8px",background:`linear-gradient(180deg,${C.bg},${C.white})`}}>
-                  <CardViz card={card} photo={card._thumb||null} sz="md"/>
+                  <CardViz card={card} photo={card._thumb||null} sz="md" imgUrl={card._fromEbay?card._ebayImg:null}/>
                 </div>
                 <div style={{padding:"8px 10px 12px"}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{card.player||"—"}</div>
