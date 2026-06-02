@@ -2087,17 +2087,32 @@ export default function CardGoal() {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
-      const updated = [...col];
-      for(let i = 0; i < updated.length; i++) {
-        const card = updated[i];
-        const newPrice = await fetchPrice(card).catch(()=>null);
-        if(newPrice) {
-          updated[i] = {...card, ...newPrice};
-        }
-        // Small delay to avoid rate limiting
-        await new Promise(r=>setTimeout(r,500));
+      // Send all cards in ONE single AI call instead of one by one
+      const cardList = col.map((c,i) => `${i+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"} | ${c.season||"?"}`).join("\n");
+      
+      const raw = await callAI([{role:"user",content:
+`Eres experto tasador de cromos de fútbol. Estima el precio actual de mercado en EUR para estas ${col.length} cartas basándote en eBay, Cardmarket y Todocoleccion:
+
+${cardList}
+
+Devuelve SOLO un array JSON con un objeto por carta en el mismo orden:
+[{"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay"},{"priceEur":10,...},...]
+
+Si no conoces el precio de alguna carta pon null para ese objeto.`
+      }], false, 1000);
+
+      // Parse the JSON array
+      const cleaned = raw.replace(/```json|```/g,"").trim();
+      const prices = JSON.parse(cleaned);
+      
+      if(Array.isArray(prices)) {
+        const updated = col.map((card, i) => {
+          const p = prices[i];
+          if(!p || !p.priceEur) return card;
+          return {...card, priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"Estimación"};
+        });
+        setCol(updated);
       }
-      setCol(updated);
     } catch(e) { console.error(e); }
     setUpdatingPrices(false);
   },[col, updatingPrices]);
