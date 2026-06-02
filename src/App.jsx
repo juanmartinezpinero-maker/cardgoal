@@ -527,40 +527,50 @@ const CATALOG = [
 ];
 
 function searchCards(query) {
-  const q = query.toLowerCase().trim();
-  const words = q.split(/\s+/);
+  // Normaliza: minúsculas y quita acentos (mbappe == mbappé)
+  const norm = (s) => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
 
-  // Score each card against query words
+  const q = norm(query);
+  const words = q.split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+
   const scored = CATALOG.map(card => {
-    const fields = [
-      card.player, card.team, card.season, card.manufacturer,
-      card.collection, card.rarity, card.cardNumber||""
-    ].join(" ").toLowerCase();
+    const playerN = norm(card.player);
+    const otherN  = norm([card.team, card.season, card.manufacturer, card.collection, card.rarity, card.cardNumber||""].join(" "));
 
-    let score = 0;
+    let playerHits = 0, otherHits = 0;
     for (const w of words) {
-      if (fields.includes(w)) score += w.length; // longer word match = higher score
+      if (playerN.includes(w)) playerHits += w.length;
+      else if (otherN.includes(w)) otherHits += w.length;
     }
-    return {card, score};
-  }).filter(x => x.score > 0)
-    .sort((a,b) => b.score - a.score);
+    // El nombre del jugador pesa muchísimo más que los demás campos
+    const score = playerHits * 100 + otherHits;
+    return { card, score, playerHits };
+  }).filter(x => x.score > 0);
 
-  // If no exact matches, find by player name similarity
-  if (!scored.length) {
+  // Si ALGÚN cromo coincide por nombre de jugador, descartamos los que solo
+  // coincidían por equipo/marca (para no mezclar jugadores distintos)
+  const hasPlayerMatch = scored.some(x => x.playerHits > 0);
+  let pool = hasPlayerMatch ? scored.filter(x => x.playerHits > 0) : scored;
+
+  // Si no hay nada, búsqueda aproximada por nombre de jugador
+  if (!pool.length) {
     for (const card of CATALOG) {
-      const playerL = card.player.toLowerCase();
-      if (words.some(w => w.length > 3 && playerL.includes(w.slice(0,4)))) {
-        scored.push({card, score:1});
+      const playerN = norm(card.player);
+      if (words.some(w => w.length > 3 && playerN.includes(w.slice(0, 4)))) {
+        pool.push({ card, score: 1, playerHits: 1 });
       }
     }
   }
 
-  // Take top 4, deduplicate by collection
+  pool.sort((a, b) => b.score - a.score);
+
+  // Hasta 6 resultados, sin repetir misma carta
   const seen = new Set();
   const results = [];
-  for (const {card} of scored) {
+  for (const { card } of pool) {
     const key = `${card.player}|${card.collection}|${card.rarity}`;
-    if (!seen.has(key) && results.length < 4) {
+    if (!seen.has(key) && results.length < 6) {
       seen.add(key);
       results.push({
         ...card,
