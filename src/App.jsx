@@ -1878,7 +1878,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
 }
 
 /* COLLECTION */
-function Collection({col, nav, onTap, lang, onUpdatePrices}) {
+function Collection({col, nav, onTap, lang, onUpdatePrices, isUpdating}) {
   const [filt,setFilt]=useState("all");
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
@@ -1904,17 +1904,36 @@ function Collection({col, nav, onTap, lang, onUpdatePrices}) {
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:C.bg}}>
       {/* Header */}
-      <div style={{background:C.white,borderBottom:`1px solid ${C.border}`,flexShrink:0,padding:"14px 18px 10px"}}>
-        <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>{isES?"Mi Colección":"My Collection"}</div>
+      <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,flexShrink:0,padding:"14px 18px 10px"}}>
+        <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.white}}>{isES?"Mi Colección":"My Collection"}</div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
           <div style={{display:"flex",alignItems:"baseline",gap:8}}>
             <span style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent}}>{eur(total)}</span>
             <span style={{fontSize:13,color:C.sub}}>{col.length} {isES?"cartas":"cards"}</span>
           </div>
-          {onUpdatePrices&&<button onClick={onUpdatePrices} style={{padding:"6px 12px",background:C.bg2,border:`1px solid ${C.border}`,borderRadius:10,fontSize:11,fontWeight:700,color:C.accent,cursor:"pointer",fontFamily:FD,display:"flex",alignItems:"center",gap:5}}>
-            🔄 {isES?"Actualizar":"Update"}
-          </button>}
         </div>
+
+        {/* Update prices button — full width, premium design */}
+        {onUpdatePrices&&col.length>0&&(
+          <button onClick={onUpdatePrices} disabled={isUpdating} style={{
+            width:"100%",marginTop:12,padding:"12px 16px",
+            background:isUpdating?"transparent":`linear-gradient(135deg,${C.bg3},${C.bg2})`,
+            border:`1px solid ${isUpdating?C.border:C.accent+"44"}`,
+            borderRadius:14,cursor:isUpdating?"default":"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            transition:"all .2s",boxShadow:isUpdating?"none":`0 2px 12px ${C.accent}22`
+          }}>
+            <span style={{fontSize:16}}>{isUpdating?"⏳":"🔄"}</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontFamily:FD,fontSize:12,fontWeight:700,color:isUpdating?C.hint:C.accent}}>
+                {isUpdating?(isES?"Actualizando precios...":"Updating prices..."):(isES?"Actualizar valor de tu colección":"Update your collection value")}
+              </div>
+              {!isUpdating&&<div style={{fontSize:10,color:C.hint,marginTop:1}}>
+                {isES?"Consulta los precios actuales de mercado":"Checks current market prices"}</div>}
+            </div>
+          </button>
+        )}
+
         <div style={{display:"flex",gap:6,marginTop:10}}>
           {FILTERS.map(([l,v])=>(
             <div key={v} onClick={()=>setFilt(v)} style={{padding:"5px 14px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",background:filt===v?C.accent:C.bg,color:filt===v?"#fff":C.sub,border:`1px solid ${filt===v?C.accent:C.border}`,transition:"all .15s"}}>{l}</div>
@@ -2137,7 +2156,7 @@ export default function CardGoal() {
               {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
               {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
-              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang} onUpdatePrices={handleUpdatePrices}/>}
+              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices}/>}
               {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")}/>}
             </>
           )}
