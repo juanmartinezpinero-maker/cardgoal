@@ -836,16 +836,64 @@ function teamColors(team="") {
   return ["#1a3a6a","#0f1f40","#00C853"];
 }
 
-/* ─── CARD VISUAL ─────────────────────────────────────────────
-   Full SVG card with player silhouette, team colors, series design.
-   Instant — no API calls, no external images needed.
+/* ─── EBAY REAL PHOTO ─────────────────────────────────────────
+   Llama a /api/ebay (función serverless en Vercel) para traer la
+   foto real del cromo desde eBay. Filtra camisetas, fotos firmadas,
+   pósters, etc. Cachea por carta para no repetir llamadas.
 ──────────────────────────────────────────────────────────────── */
-function CardViz({ card={}, photo=null, sz="md" }) {
+const ebayCache = {};
+const EBAY_BAD = /camiseta|t-?shirt|shirt|jersey|firmad|signed|autograph|enmarcad|framed|p[oó]ster|poster|funda|sleeve|figur|mug|taza|bal[oó]n|botas|boots|album completo|sobre cerrad|booster|caja|box|lote de|bufanda|scarf/i;
+
+async function fetchEbayCard(card) {
+  const key = `${card.player||""}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||""}|${card.season||""}`;
+  if (ebayCache[key] !== undefined) return ebayCache[key];
+
+  // Búsqueda específica: jugador + marca + colección + temporada
+  const q = [card.player, card.manufacturer, card.collection, card.season]
+    .filter(Boolean).join(" ").trim() || (card.player || "");
+  if (!q) { ebayCache[key] = null; return null; }
+
+  try {
+    const r = await fetch(`/api/ebay?q=${encodeURIComponent(q)}`);
+    if (!r.ok) { ebayCache[key] = null; return null; }
+    const data = await r.json();
+    const list = (data.results || []).filter(it => it.image && !EBAY_BAD.test(it.title || ""));
+    const best = list[0]
+      || ((data.best && data.best.image && !EBAY_BAD.test(data.best.title || "")) ? data.best : null);
+    const out = best ? { image: best.image, price: best.price, url: best.url, title: best.title } : null;
+    ebayCache[key] = out;
+    return out;
+  } catch {
+    ebayCache[key] = null;
+    return null;
+  }
+}
+
+/* ─── CARD VISUAL ─────────────────────────────────────────────
+   Si hay foto de scanner -> la muestra.
+   Si no, intenta la foto real de eBay.
+   Si tampoco hay -> dibuja el cromo en SVG (fallback de siempre).
+──────────────────────────────────────────────────────────────── */
+function CardViz({ card={}, photo=null, sz="md", ebay=true }) {
+  const [ebayImg, setEbayImg] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setEbayImg(null);
+    const isScan = photo && photo.startsWith("data:");
+    if (!isScan && ebay && card && card.player) {
+      fetchEbayCard(card).then(r => { if (alive && r && r.image) setEbayImg(r.image); });
+    }
+    return () => { alive = false; };
+  }, [card?.player, card?.manufacturer, card?.collection, card?.season, photo, ebay]);
+
   const series  = getSeries(card.manufacturer, card.collection);
   const rs      = RARITY_STYLE(card.rarity||"");
   const jersey  = jnum(card.player||"");
   const [c1,c2,c3] = teamColors(card.team||"");
-  const img     = photo && photo.startsWith("data:") ? photo : null;
+  const isScan  = photo && photo.startsWith("data:");
+  const img     = isScan ? photo : ebayImg;   // foto scanner o foto real de eBay
+  const imgFit  = isScan ? "cover" : "contain"; // eBay: mostrar cromo entero sin recortar
   const player  = card.player||"—";
   const initials= player.split(" ").map(w=>w[0]||"").join("").slice(0,2).toUpperCase();
 
@@ -863,7 +911,7 @@ function CardViz({ card={}, photo=null, sz="md" }) {
     return (
       <div style={{width:s.w,height:s.h,borderRadius:s.r,border:rs?`2px solid ${rs.c}`:"1.5px solid rgba(255,255,255,0.15)",boxShadow:rs?`0 0 20px ${rs.c}55`:"0 4px 20px rgba(0,0,0,0.4)",position:"relative",overflow:"hidden",flexShrink:0,background:"#000"}}>
         {/* Full card photo — no white gaps */}
-        <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",display:"block"}}/>
+        <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:imgFit,objectPosition:"center",display:"block"}}/>
         {/* Gradient overlay for name readability */}
         <div style={{position:"absolute",bottom:0,left:0,right:0,height:"40%",background:"linear-gradient(transparent,rgba(0,0,0,0.85))"}}/>
         <div style={{position:"absolute",bottom:0,left:0,right:0,padding:`${s.fp/2}px ${s.fp}px ${s.fp}px`}}>
