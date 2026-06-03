@@ -2153,7 +2153,9 @@ export default function CardGoal() {
   const [addedIds,setAdded] = useState(new Set());
   const [modal,setModal]   = useState(null);
   const [paywall,setPaywall] = useState(null); // null | "scan" | "grade" | "collection"
-  const isPremium = user?.isPremium||false;
+  // FASE GRATIS: todo desbloqueado para todos mientras validamos el interés.
+  // Para reactivar el pago en el futuro: volver a poner  user?.isPremium||false
+  const isPremium = true;
   const [lang,setLang]     = useState(()=>{ try{return localStorage.getItem("cardgoal_lang")||"es";}catch{return "es";} });
   const [priceAlerts,setPriceAlerts] = useState([]);
 
