@@ -81,6 +81,8 @@ const supa = {
         price_min: card.priceMin, price_prem: card.pricePrem,
         price_source: card.priceSource, change_week: card.changeWeek,
         change_month: card.changeMonth, scanned: card.scanned||false,
+        image: card._thumb || card._ebayImg || null,
+        ebay_title: card._ebayTitle || null,
       })
     });
     return r.json();
@@ -1654,6 +1656,48 @@ function AuthScreen({onAuth, lang}) {
   );
 }
 
+/* Aviso para instalar la PWA en el móvil */
+function InstallPrompt({ lang }){
+  const isES = lang==="es";
+  const [show,setShow]=useState(false);
+  const [ios,setIos]=useState(false);
+  const deferred=useRef(null);
+  useEffect(()=>{
+    if(typeof window==="undefined") return;
+    const standalone = (window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
+    if(standalone) return;                       // ya instalada
+    try{ if(localStorage.getItem("cg_install_dismiss")==="1") return; }catch{}
+    const ua = window.navigator.userAgent||"";
+    const isIos = /iphone|ipad|ipod/i.test(ua);
+    if(isIos){ setIos(true); setShow(true); return; }   // iOS: instrucciones
+    const handler=(e)=>{ e.preventDefault(); deferred.current=e; setShow(true); }; // Android: botón
+    window.addEventListener("beforeinstallprompt",handler);
+    return ()=>window.removeEventListener("beforeinstallprompt",handler);
+  },[]);
+  const dismiss=()=>{ setShow(false); try{localStorage.setItem("cg_install_dismiss","1");}catch{} };
+  const install=async()=>{
+    const e=deferred.current; if(!e) return;
+    e.prompt(); try{ await e.userChoice; }catch{}
+    deferred.current=null; dismiss();
+  };
+  if(!show) return null;
+  return (
+    <div style={{margin:"10px 14px 0",background:C.accentL,border:`1px solid ${C.accent}55`,borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+      <div style={{fontSize:26}}>📲</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:FD,fontSize:13,fontWeight:800,color:C.text}}>{isES?"Instala CardGoal en tu móvil":"Install CardGoal on your phone"}</div>
+        <div style={{fontSize:11,color:C.sub,marginTop:2,lineHeight:1.4}}>
+          {ios
+            ? (isES?"Pulsa Compartir ⬆️ abajo y luego \u201cAñadir a pantalla de inicio\u201d":"Tap Share ⬆️ then \u201cAdd to Home Screen\u201d")
+            : (isES?"Tenla siempre a mano, sin ocupar espacio.":"Keep it handy, no storage needed.")}
+        </div>
+      </div>
+      {!ios&&<button onClick={install} style={{padding:"8px 14px",background:C.accent,border:"none",borderRadius:10,fontFamily:FD,fontSize:12,fontWeight:800,color:"#fff",cursor:"pointer",whiteSpace:"nowrap"}}>{isES?"Instalar":"Install"}</button>}
+      <button onClick={dismiss} aria-label="cerrar" style={{background:"none",border:"none",color:C.sub,fontSize:18,cursor:"pointer",lineHeight:1,padding:4}}>✕</button>
+    </div>
+  );
+}
+
 function Home({col, nav, lang, isPremium, user}) {
   const total = col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
   const raras = col.filter(c=>c.rarity&&!["base","Base","base card"].includes(c.rarity)).length;
@@ -2136,6 +2180,16 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
+  // Analytics: registra cada sección como una "página" en Google Analytics
+  useEffect(()=>{
+    if(typeof window==="undefined" || !window.gtag) return;
+    const names = { home:"Inicio", search:"Buscar", scanner:"Scanner", collection:"Colección" };
+    window.gtag("event","page_view",{
+      page_title: "CardGoal — "+(names[screen]||screen),
+      page_path: "/"+screen,
+      page_location: window.location.origin+"/"+screen,
+    });
+  },[screen]);
   // Check if returning from Stripe payment
   useEffect(()=>{
     const params = new URLSearchParams(window.location.search);
@@ -2166,14 +2220,22 @@ export default function CardGoal() {
     if(!user?.token) return;
     supa.loadCards(user.token).then(cards=>{
       if(!Array.isArray(cards)) return;
-      const mapped = cards.map(c=>({
-        _uid: c.id, player:c.player, team:c.team, season:c.season,
-        manufacturer:c.manufacturer, collection:c.collection,
-        cardNumber:c.card_number, rarity:c.rarity, condition:c.condition,
-        priceEur:c.price_eur, priceMin:c.price_min, pricePrem:c.price_prem,
-        priceSource:c.price_source, changeWeek:c.change_week, changeMonth:c.change_month,
-        scanned:c.scanned, _dbId:c.id,
-      }));
+      const mapped = cards.map(c=>{
+        const isData = typeof c.image==="string" && c.image.startsWith("data:");
+        const isUrl  = typeof c.image==="string" && c.image.startsWith("http");
+        return {
+          _uid: c.id, player:c.player, team:c.team, season:c.season,
+          manufacturer:c.manufacturer, collection:c.collection,
+          cardNumber:c.card_number, rarity:c.rarity, condition:c.condition,
+          priceEur:c.price_eur, priceMin:c.price_min, pricePrem:c.price_prem,
+          priceSource:c.price_source, changeWeek:c.change_week, changeMonth:c.change_month,
+          scanned:c.scanned, _dbId:c.id,
+          _thumb: isData ? c.image : null,                 // foto escaneada
+          _ebayImg: isUrl ? c.image : null,                // foto de eBay
+          _fromEbay: isUrl || !!c.ebay_title,
+          _ebayTitle: c.ebay_title || null,
+        };
+      });
       setCol(mapped);
       setAdded(new Set(mapped.map(c=>c._uid)));
     }).catch(()=>{});
@@ -2327,6 +2389,7 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
             <AuthScreen onAuth={handleAuth} lang={lang}/>
           ) : (
             <>
+              <InstallPrompt lang={lang}/>
               {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
               {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
