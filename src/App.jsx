@@ -1694,46 +1694,53 @@ function InstallPrompt({ lang, deferred }){
 /* Pop-up con explicación de cómo instalar la app */
 function InstallModal({ lang, deferred, onClose }){
   const isES = lang==="es";
-  const ua = typeof navigator!=="undefined" ? navigator.userAgent : "";
-  const ios = /iphone|ipad|ipod/i.test(ua);
   const install=async()=>{ if(!deferred) return; try{ deferred.prompt(); await deferred.userChoice; }catch{} onClose(); };
   const Step=({n,children})=>(
-    <div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:12}}>
-      <div style={{flexShrink:0,width:24,height:24,borderRadius:"50%",background:C.accent,color:"#fff",fontFamily:FD,fontSize:13,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{n}</div>
-      <div style={{fontSize:13,color:C.text,lineHeight:1.5,paddingTop:2}}>{children}</div>
+    <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:10}}>
+      <div style={{flexShrink:0,width:22,height:22,borderRadius:"50%",background:C.accent,color:"#fff",fontFamily:FD,fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{n}</div>
+      <div style={{fontSize:14,color:C.text,lineHeight:1.5,paddingTop:1}}>{children}</div>
+    </div>
+  );
+  const Section=({icon,title,children})=>(
+    <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <span style={{fontSize:24}}>{icon}</span>
+        <span style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{title}</span>
+      </div>
+      {children}
     </div>
   );
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.white,width:"100%",maxWidth:480,borderRadius:"20px 20px 0 0",padding:"22px 20px 32px",color:C.text}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div style={{fontFamily:FD,fontSize:18,fontWeight:800}}>📲 {isES?"Instalar CardGoal":"Install CardGoal"}</div>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,color:C.sub,cursor:"pointer"}}>✕</button>
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.white,width:"100%",maxWidth:440,maxHeight:"88vh",overflowY:"auto",borderRadius:22,padding:"24px 22px",color:C.text,boxShadow:"0 24px 70px rgba(0,0,0,0.45)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={{fontFamily:FD,fontSize:21,fontWeight:800}}>📲 {isES?"Instala CardGoal":"Install CardGoal"}</div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:26,color:C.sub,cursor:"pointer",lineHeight:1}}>✕</button>
         </div>
-        <div style={{fontSize:13,color:C.sub,marginBottom:18,lineHeight:1.5}}>
-          {isES?"Añade CardGoal a tu pantalla de inicio y úsala como una app normal, sin pasar por ninguna tienda.":"Add CardGoal to your home screen and use it like a normal app, no store needed."}
+        <div style={{fontSize:14,color:C.sub,marginBottom:20,lineHeight:1.5}}>
+          {isES?"Ténla en tu pantalla de inicio como una app normal, sin pasar por ninguna tienda. Elige tu móvil:":"Add it to your home screen like a normal app, no store needed. Pick your phone:"}
         </div>
 
         {deferred && (
-          <button onClick={install} style={{width:"100%",padding:"14px",background:C.accent,border:"none",borderRadius:12,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",marginBottom:18}}>
-            {isES?"Instalar ahora":"Install now"}
+          <button onClick={install} style={{width:"100%",padding:"15px",background:`linear-gradient(135deg,${C.accent},#04A857)`,border:"none",borderRadius:14,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",marginBottom:18,boxShadow:`0 6px 18px ${C.accent}55`}}>
+            {isES?"⚡ Instalar ahora (Android)":"⚡ Install now (Android)"}
           </button>
         )}
 
-        {ios && (
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>{isES?"En iPhone (Safari)":"On iPhone (Safari)"}</div>
-            <Step n="1">{isES?<>Pulsa el botón <b>Compartir</b> ⬆️ (abajo en la barra de Safari).</>:<>Tap the <b>Share</b> button ⬆️ (bottom Safari bar).</>}</Step>
-            <Step n="2">{isES?<>Desliza y pulsa <b>"Añadir a pantalla de inicio"</b>.</>:<>Scroll and tap <b>"Add to Home Screen"</b>.</>}</Step>
-            <Step n="3">{isES?<>Pulsa <b>"Añadir"</b> arriba a la derecha. ¡Listo!</>:<>Tap <b>"Add"</b> top-right. Done!</>}</Step>
-          </div>
-        )}
+        <Section icon="🤖" title="Android">
+          {deferred
+            ? <div style={{fontSize:14,color:C.text,lineHeight:1.5}}>{isES?<>Pulsa el botón verde <b>"Instalar ahora"</b> de arriba 👆</>:<>Tap the green <b>"Install now"</b> button above 👆</>}</div>
+            : <>
+                <Step n="1">{isES?<>Pulsa el menú <b>⋮</b> (arriba a la derecha del navegador Chrome).</>:<>Tap the <b>⋮</b> menu (top-right in Chrome).</>}</Step>
+                <Step n="2">{isES?<>Pulsa <b>"Instalar aplicación"</b> o <b>"Añadir a pantalla de inicio"</b>.</>:<>Tap <b>"Install app"</b> or <b>"Add to Home screen"</b>.</>}</Step>
+              </>}
+        </Section>
 
-        {!ios && !deferred && (
-          <div style={{fontSize:13,color:C.text,lineHeight:1.5,background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
-            {isES?<>Abre el menú de tu navegador (<b>⋮</b>) y pulsa <b>"Instalar app"</b> o <b>"Añadir a pantalla de inicio"</b>.</>:<>Open your browser menu (<b>⋮</b>) and tap <b>"Install app"</b> or <b>"Add to Home screen"</b>.</>}
-          </div>
-        )}
+        <Section icon="🍎" title="iPhone (Safari)">
+          <Step n="1">{isES?<>Pulsa el botón <b>Compartir</b> ⬆️ (en la barra de abajo de Safari).</>:<>Tap the <b>Share</b> button ⬆️ (Safari bottom bar).</>}</Step>
+          <Step n="2">{isES?<>Desliza hacia abajo y pulsa <b>"Añadir a pantalla de inicio"</b>.</>:<>Scroll down and tap <b>"Add to Home Screen"</b>.</>}</Step>
+          <Step n="3">{isES?<>Pulsa <b>"Añadir"</b> arriba a la derecha. ¡Ya está! 🎉</>:<>Tap <b>"Add"</b> top-right. Done! 🎉</>}</Step>
+        </Section>
       </div>
     </div>
   );
@@ -1814,15 +1821,15 @@ function Home({col, nav, lang, isPremium, user, onInstallClick}) {
           const standalone = typeof window!=="undefined" && ((window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||window.navigator.standalone);
           if(standalone) return null;
           return (
-            <button onClick={onInstallClick} style={{width:"100%",marginTop:10,padding:"16px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:C.shadow,transition:"transform .15s"}}
+            <button onClick={onInstallClick} style={{width:"100%",marginTop:10,padding:"16px",background:`linear-gradient(135deg,${C.accent},#04A857)`,border:"none",borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:`0 6px 18px ${C.accent}55`,transition:"transform .15s"}}
               onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
               onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
-              <div style={{width:40,height:40,borderRadius:12,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📲</div>
+              <div style={{width:40,height:40,borderRadius:12,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📲</div>
               <div style={{textAlign:"left"}}>
-                <div style={{fontFamily:FD,fontSize:14,fontWeight:700,color:C.text}}>{isES?"Instalar app en el móvil":"Install app on phone"}</div>
-                <div style={{fontSize:11,color:C.sub,marginTop:2}}>{isES?"Tenla a un toque, como una app":"One tap away, like an app"}</div>
+                <div style={{fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff"}}>{isES?"Instalar app en el móvil":"Install app on phone"}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.9)",marginTop:2}}>{isES?"Tenla a un toque, como una app":"One tap away, like an app"}</div>
               </div>
-              <div style={{marginLeft:"auto",fontSize:18,color:C.accent,flexShrink:0}}>›</div>
+              <div style={{marginLeft:"auto",fontSize:20,color:"#fff",flexShrink:0}}>›</div>
             </button>
           );
         })()}
@@ -2434,7 +2441,7 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
 
       {/* Top header bar — premium */}
       <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div onClick={()=>{setModal(null);setScreen("home");}} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
           <div style={{width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#1A2035,#0D1525)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>⚽</div>
           <div>
             <div style={{fontFamily:FD,fontSize:17,fontWeight:800,color:C.white,letterSpacing:"-0.01em",lineHeight:1}}>CardGoal</div>
@@ -2475,20 +2482,20 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
       </div>
 
       {/* Bottom nav bar — premium */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(13,15,20,0.97)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",borderTop:`1px solid ${C.border}`,display:"flex",zIndex:200,boxShadow:"0 -1px 0 rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",width:"100%",maxWidth:600,margin:"0 auto",padding:"6px 0 8px"}}>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(13,15,20,0.98)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",borderTop:`2px solid ${C.accent}`,display:"flex",zIndex:200,boxShadow:"0 -6px 24px rgba(0,0,0,0.35)"}}>
+        <div style={{display:"flex",width:"100%",maxWidth:600,margin:"0 auto",padding:"8px 0 10px"}}>
           {NAV.map(item=>{
             const active=screen===item.id;
             const activeColor=item.id==="grading"?C.gold:C.accent;
             return(
               <button key={item.id} onClick={()=>{setModal(null);setScreen(item.id);}}
-                style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"6px 0",position:"relative",transition:"all .15s"}}>
+                style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"6px 0",position:"relative",transition:"all .15s"}}>
                 {/* Active background pill */}
-                {active&&<div style={{position:"absolute",top:4,left:"50%",transform:"translateX(-50%)",width:40,height:28,borderRadius:10,background:item.id==="grading"?"rgba(255,215,64,0.15)":"rgba(0,230,118,0.15)"}}/>}
-                <span style={{fontSize:18,position:"relative",zIndex:1,opacity:active?1:0.4,transition:"all .15s"}}>{item.i}</span>
-                <span style={{fontSize:9,fontWeight:active?700:500,color:active?activeColor:C.hint,letterSpacing:"0.02em",transition:"color .15s"}}>{item.l}</span>
+                {active&&<div style={{position:"absolute",top:2,left:"50%",transform:"translateX(-50%)",width:46,height:32,borderRadius:11,background:item.id==="grading"?"rgba(255,215,64,0.22)":"rgba(0,230,118,0.22)"}}/>}
+                <span style={{fontSize:23,position:"relative",zIndex:1,opacity:active?1:0.75,transition:"all .15s"}}>{item.i}</span>
+                <span style={{fontSize:10,fontWeight:active?800:600,color:active?activeColor:"#9AA3B2",letterSpacing:"0.02em",transition:"color .15s",position:"relative",zIndex:1}}>{item.l}</span>
                 {item.id==="collection"&&col.length>0&&(
-                  <div style={{position:"absolute",top:2,right:"calc(50% - 22px)",minWidth:16,height:16,background:C.accent,borderRadius:8,fontSize:8,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",boxShadow:`0 2px 6px ${C.accent}66`}}>{col.length}</div>
+                  <div style={{position:"absolute",top:0,right:"calc(50% - 24px)",minWidth:16,height:16,background:C.accent,borderRadius:8,fontSize:8,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",boxShadow:`0 2px 6px ${C.accent}66`}}>{col.length}</div>
                 )}
               </button>
             );
@@ -2497,7 +2504,7 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
       </div>
 
       {/* Bottom padding so content doesn't hide under nav */}
-      <div style={{height:70}}/>
+      <div style={{height:78}}/>
 
       {/* Paywall modal — outside everything, always on top */}
       {paywall&&<PaywallModal type={paywall} onClose={()=>setPaywall(null)} lang={lang}/>}
