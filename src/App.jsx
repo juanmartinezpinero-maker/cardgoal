@@ -1568,6 +1568,8 @@ function AuthScreen({onAuth, lang}) {
           setErr(res.error.message||"Error al registrarse");
           setLoading(false); return;
         }
+        // Email de bienvenida (no bloquea el registro si falla)
+        try { fetch("/api/welcome",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:em})}); } catch {}
         // If email confirmation required, just switch to login with success message
         if(res.user && !res.session) {
           setMode("login");
