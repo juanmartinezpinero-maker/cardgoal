@@ -1657,29 +1657,22 @@ function AuthScreen({onAuth, lang}) {
 }
 
 /* Aviso para instalar la PWA en el móvil */
-function InstallPrompt({ lang }){
+function InstallPrompt({ lang, deferred }){
   const isES = lang==="es";
   const [show,setShow]=useState(false);
   const [ios,setIos]=useState(false);
-  const deferred=useRef(null);
   useEffect(()=>{
     if(typeof window==="undefined") return;
     const standalone = (window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
-    if(standalone) return;                       // ya instalada
-    try{ if(localStorage.getItem("cg_install_dismiss")==="1") return; }catch{}
+    if(standalone){ setShow(false); return; }            // ya instalada
+    try{ if(localStorage.getItem("cg_install_dismiss")==="1"){ setShow(false); return; } }catch{}
     const ua = window.navigator.userAgent||"";
     const isIos = /iphone|ipad|ipod/i.test(ua);
-    if(isIos){ setIos(true); setShow(true); return; }   // iOS: instrucciones
-    const handler=(e)=>{ e.preventDefault(); deferred.current=e; setShow(true); }; // Android: botón
-    window.addEventListener("beforeinstallprompt",handler);
-    return ()=>window.removeEventListener("beforeinstallprompt",handler);
-  },[]);
+    setIos(isIos);
+    setShow(isIos || !!deferred);                          // iOS: instrucciones; Android: si hay evento
+  },[deferred]);
   const dismiss=()=>{ setShow(false); try{localStorage.setItem("cg_install_dismiss","1");}catch{} };
-  const install=async()=>{
-    const e=deferred.current; if(!e) return;
-    e.prompt(); try{ await e.userChoice; }catch{}
-    deferred.current=null; dismiss();
-  };
+  const install=async()=>{ if(!deferred) return; try{ deferred.prompt(); await deferred.userChoice; }catch{} dismiss(); };
   if(!show) return null;
   return (
     <div style={{margin:"10px 14px 0",background:C.accentL,border:`1px solid ${C.accent}55`,borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
@@ -1698,7 +1691,55 @@ function InstallPrompt({ lang }){
   );
 }
 
-function Home({col, nav, lang, isPremium, user}) {
+/* Pop-up con explicación de cómo instalar la app */
+function InstallModal({ lang, deferred, onClose }){
+  const isES = lang==="es";
+  const ua = typeof navigator!=="undefined" ? navigator.userAgent : "";
+  const ios = /iphone|ipad|ipod/i.test(ua);
+  const install=async()=>{ if(!deferred) return; try{ deferred.prompt(); await deferred.userChoice; }catch{} onClose(); };
+  const Step=({n,children})=>(
+    <div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:12}}>
+      <div style={{flexShrink:0,width:24,height:24,borderRadius:"50%",background:C.accent,color:"#fff",fontFamily:FD,fontSize:13,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{n}</div>
+      <div style={{fontSize:13,color:C.text,lineHeight:1.5,paddingTop:2}}>{children}</div>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.white,width:"100%",maxWidth:480,borderRadius:"20px 20px 0 0",padding:"22px 20px 32px",color:C.text}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontFamily:FD,fontSize:18,fontWeight:800}}>📲 {isES?"Instalar CardGoal":"Install CardGoal"}</div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,color:C.sub,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{fontSize:13,color:C.sub,marginBottom:18,lineHeight:1.5}}>
+          {isES?"Añade CardGoal a tu pantalla de inicio y úsala como una app normal, sin pasar por ninguna tienda.":"Add CardGoal to your home screen and use it like a normal app, no store needed."}
+        </div>
+
+        {deferred && (
+          <button onClick={install} style={{width:"100%",padding:"14px",background:C.accent,border:"none",borderRadius:12,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",marginBottom:18}}>
+            {isES?"Instalar ahora":"Install now"}
+          </button>
+        )}
+
+        {ios && (
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>{isES?"En iPhone (Safari)":"On iPhone (Safari)"}</div>
+            <Step n="1">{isES?<>Pulsa el botón <b>Compartir</b> ⬆️ (abajo en la barra de Safari).</>:<>Tap the <b>Share</b> button ⬆️ (bottom Safari bar).</>}</Step>
+            <Step n="2">{isES?<>Desliza y pulsa <b>"Añadir a pantalla de inicio"</b>.</>:<>Scroll and tap <b>"Add to Home Screen"</b>.</>}</Step>
+            <Step n="3">{isES?<>Pulsa <b>"Añadir"</b> arriba a la derecha. ¡Listo!</>:<>Tap <b>"Add"</b> top-right. Done!</>}</Step>
+          </div>
+        )}
+
+        {!ios && !deferred && (
+          <div style={{fontSize:13,color:C.text,lineHeight:1.5,background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
+            {isES?<>Abre el menú de tu navegador (<b>⋮</b>) y pulsa <b>"Instalar app"</b> o <b>"Añadir a pantalla de inicio"</b>.</>:<>Open your browser menu (<b>⋮</b>) and tap <b>"Install app"</b> or <b>"Add to Home screen"</b>.</>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Home({col, nav, lang, isPremium, user, onInstallClick}) {
   const total = col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
   const raras = col.filter(c=>c.rarity&&!["base","Base","base card"].includes(c.rarity)).length;
   const isES = lang==="es";
@@ -1767,6 +1808,24 @@ function Home({col, nav, lang, isPremium, user}) {
           </div>
           <div style={{marginLeft:"auto",fontSize:18,color:C.gold,flexShrink:0}}>›</div>
         </button>
+
+        {/* Botón instalar app */}
+        {onInstallClick && (()=>{
+          const standalone = typeof window!=="undefined" && ((window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||window.navigator.standalone);
+          if(standalone) return null;
+          return (
+            <button onClick={onInstallClick} style={{width:"100%",marginTop:10,padding:"16px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:C.shadow,transition:"transform .15s"}}
+              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
+              <div style={{width:40,height:40,borderRadius:12,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📲</div>
+              <div style={{textAlign:"left"}}>
+                <div style={{fontFamily:FD,fontSize:14,fontWeight:700,color:C.text}}>{isES?"Instalar app en el móvil":"Install app on phone"}</div>
+                <div style={{fontSize:11,color:C.sub,marginTop:2}}>{isES?"Tenla a un toque, como una app":"One tap away, like an app"}</div>
+              </div>
+              <div style={{marginLeft:"auto",fontSize:18,color:C.accent,flexShrink:0}}>›</div>
+            </button>
+          );
+        })()}
 
         {/* Premium banner */}
         {!isPremium&&<button onClick={()=>startCheckout(user?.email||"")} style={{width:"100%",padding:"16px",background:"linear-gradient(135deg,#1a0a2e,#2d1054)",border:`1px solid rgba(160,80,255,0.4)`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:"0 4px 20px rgba(120,40,200,0.2)",transition:"transform .15s"}}
@@ -2207,6 +2266,16 @@ export default function CardGoal() {
   const [addedIds,setAdded] = useState(new Set());
   const [modal,setModal]   = useState(null);
   const [paywall,setPaywall] = useState(null); // null | "scan" | "grade" | "collection"
+  // Instalación PWA: capturamos el evento de Android para poder ofrecer el botón
+  const [deferredInstall,setDeferredInstall] = useState(null);
+  const [showInstallModal,setShowInstallModal] = useState(false);
+  useEffect(()=>{
+    const h=(e)=>{ e.preventDefault(); setDeferredInstall(e); };
+    const done=()=>{ setDeferredInstall(null); setShowInstallModal(false); };
+    window.addEventListener("beforeinstallprompt",h);
+    window.addEventListener("appinstalled",done);
+    return ()=>{ window.removeEventListener("beforeinstallprompt",h); window.removeEventListener("appinstalled",done); };
+  },[]);
   // FASE GRATIS: todo desbloqueado para todos mientras validamos el interés.
   // Para reactivar el pago en el futuro: volver a poner  user?.isPremium||false
   const isPremium = true;
@@ -2389,8 +2458,8 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
             <AuthScreen onAuth={handleAuth} lang={lang}/>
           ) : (
             <>
-              <InstallPrompt lang={lang}/>
-              {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user}/>}
+              <InstallPrompt lang={lang} deferred={deferredInstall}/>
+              {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user} onInstallClick={()=>setShowInstallModal(true)}/>}
               {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
               {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
               {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices}/>}
@@ -2432,6 +2501,9 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
 
       {/* Paywall modal — outside everything, always on top */}
       {paywall&&<PaywallModal type={paywall} onClose={()=>setPaywall(null)} lang={lang}/>}
+
+      {/* Pop-up de instalación */}
+      {showInstallModal&&<InstallModal lang={lang} deferred={deferredInstall} onClose={()=>setShowInstallModal(false)}/>}
     </div>
   );
 }
