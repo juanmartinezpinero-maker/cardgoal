@@ -227,6 +227,31 @@ function startCheckout(email) {
   window.open(url, "_blank");
 }
 
+/* ===== eBay afiliado (eBay Partner Network) ===== */
+const EBAY_CAMPID = "5339155735";          // Campaign ID de CardGoal
+const EBAY_MKRID  = "1185-53479-19255-0";  // Rotation ID de eBay España
+function ebayAffiliate(url){
+  if(!url) return url;
+  try{
+    const u = new URL(url);
+    u.searchParams.set("mkevt","1");
+    u.searchParams.set("mkcid","1");
+    u.searchParams.set("mkrid",EBAY_MKRID);
+    u.searchParams.set("campid",EBAY_CAMPID);
+    u.searchParams.set("toolid","10001");
+    return u.toString();
+  }catch{
+    const sep = url.includes("?")?"&":"?";
+    return url+sep+"mkevt=1&mkcid=1&mkrid="+EBAY_MKRID+"&campid="+EBAY_CAMPID+"&toolid=10001";
+  }
+}
+function ebayLinkFor(card){
+  if(card && card._ebayUrl) return ebayAffiliate(card._ebayUrl);   // anuncio concreto
+  const q = [card?.player, card?.season, card?.manufacturer, card?.collection, (card?.rarity&&card.rarity!=="Base"?card.rarity:"")]
+    .filter(Boolean).join(" ").trim() || (card?.player||"");
+  return ebayAffiliate("https://www.ebay.es/sch/i.html?_nkw="+encodeURIComponent(q));  // búsqueda del cromo
+}
+
 async function checkPremium(email) {
   // For now returns false — will be updated when Stripe webhook is configured
   return false;
@@ -1355,6 +1380,11 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
           <button onClick={doAdd} disabled={added} style={{width:"100%",padding:"15px",background:added?C.accentL:C.accent,border:added?`1.5px solid ${C.accent}`:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:added?C.accent:"#fff",cursor:added?"default":"pointer",transition:"all .2s",marginBottom:8}}>
             {added?t.added:t.add}
           </button>
+          {/* Ver en eBay (enlace de afiliado) */}
+          <button onClick={()=>window.open(ebayLinkFor(card),"_blank","noopener")} style={{width:"100%",padding:"13px",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:14,fontWeight:700,color:C.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8}}>
+            🛒 {lang==="es"?"Ver en eBay":"View on eBay"}
+          </button>
+          <div style={{fontSize:10,color:C.hint,textAlign:"center",marginTop:6}}>{lang==="es"?"Enlace de afiliado · CardGoal puede recibir una comisión":"Affiliate link · CardGoal may earn a commission"}</div>
           {/* WhatsApp share */}
           <button onClick={()=>{
             const p2=price?.priceEur;
