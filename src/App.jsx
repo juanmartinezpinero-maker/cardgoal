@@ -1966,15 +1966,15 @@ function Home({col, nav, lang, isPremium, user, onInstallClick}) {
 
         {/* Apoyar el proyecto (Ko-fi) */}
         <button onClick={()=>window.open("https://ko-fi.com/cardgoal","_blank","noopener")}
-          style={{width:"100%",marginTop:10,padding:"14px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:C.shadow,transition:"transform .15s"}}
+          style={{width:"100%",marginTop:10,padding:"16px",background:"linear-gradient(135deg,#FF6B6B,#E8484A)",border:"none",borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 18px rgba(232,72,74,0.4)",transition:"transform .15s"}}
           onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
           onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
-          <div style={{width:38,height:38,borderRadius:11,background:"rgba(255,94,91,0.16)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>☕</div>
+          <div style={{width:40,height:40,borderRadius:12,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>☕</div>
           <div style={{textAlign:"left"}}>
-            <div style={{fontFamily:FD,fontSize:14,fontWeight:700,color:C.text}}>{isES?"Apoya el proyecto":"Support the project"}</div>
-            <div style={{fontSize:11,color:C.sub,marginTop:2}}>{isES?"Ayuda a mantener CardGoal gratis":"Help keep CardGoal free"}</div>
+            <div style={{fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff"}}>{isES?"Apoya el proyecto":"Support the project"}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.9)",marginTop:2}}>{isES?"Invítanos a un café y mantén CardGoal gratis":"Buy us a coffee, keep CardGoal free"}</div>
           </div>
-          <div style={{marginLeft:"auto",fontSize:18,color:C.sub,flexShrink:0}}>›</div>
+          <div style={{marginLeft:"auto",fontSize:20,color:"#fff",flexShrink:0}}>›</div>
         </button>
 
         {!isPremium&&<button onClick={()=>startCheckout(user?.email||"")} style={{width:"100%",padding:"16px",background:"linear-gradient(135deg,#1a0a2e,#2d1054)",border:`1px solid rgba(160,80,255,0.4)`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:"0 4px 20px rgba(120,40,200,0.2)",transition:"transform .15s"}}
