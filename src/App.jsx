@@ -38,12 +38,22 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const supa = {
   headers: { "Content-Type":"application/json", "apikey":SUPA_KEY, "Authorization":`Bearer ${SUPA_KEY}` },
 
-  async signUp(email, password) {
+  async signUp(email, password, meta) {
     const r = await fetch(`${SUPA_URL}/auth/v1/signup`, {
       method:"POST", headers:this.headers,
-      body: JSON.stringify({email, password})
+      body: JSON.stringify({email, password, data: meta||{}})
     });
     return r.json();
+  },
+
+  // Histórico de precios: guarda una "foto" del precio real de un cromo
+  async saveSnapshot(cardKey, priceEur, source) {
+    try {
+      await fetch(`${SUPA_URL}/rest/v1/price_snapshots`, {
+        method:"POST", headers:this.headers,
+        body: JSON.stringify({ card_key: cardKey, price_eur: priceEur, source: source||null })
+      });
+    } catch {}
   },
 
   async signIn(email, password) {
@@ -613,6 +623,23 @@ function searchCards(query) {
 /* ─── PRICE — web search, called on demand ────────────────── */
 const priceCache = {};
 
+/* Histórico de precios: clave normalizada del cromo + registro (1 vez al día por cromo) */
+function cardKey(card){
+  const n = s => (s||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+  return [n(card.player),n(card.manufacturer),n(card.collection),n(card.rarity||"base"),n(card.season)].join("|");
+}
+function logPriceSnapshot(card, priceEur, source){
+  try{
+    if(priceEur==null) return;
+    const key = cardKey(card);
+    const today = new Date().toISOString().slice(0,10);
+    const flag = `cg_snap_${key}_${today}`;
+    if(localStorage.getItem(flag)) return;      // ya guardado hoy, no duplicamos
+    localStorage.setItem(flag,"1");
+    supa.saveSnapshot(key, priceEur, source);   // fire-and-forget
+  }catch{}
+}
+
 async function fetchPrice(card) {
   // Para cartas de eBay usamos el título completo del anuncio (trae Auto, /99, Relic, etc.)
   const desc = card._ebayTitle
@@ -665,6 +692,7 @@ SOLO JSON: {"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación 
   }
   const result = { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay/Todocoleccion", changeWeek:num(p.changeWeek)||0, changeMonth:num(p.changeMonth)||0 };
   priceCache[cacheKey] = result; // cache so same card always gets same price
+  logPriceSnapshot(card, result.priceEur, result.priceSource); // histórico (solo precios reales, no estimaciones)
   return result;
 }
 
@@ -1582,6 +1610,8 @@ function AuthScreen({onAuth, lang}) {
   const [pass,setPass]   = useState("");
   const [err,setErr]     = useState("");
   const [loading,setLoading] = useState(false);
+  const [terms,setTerms]   = useState(false);   // acepta términos (obligatorio)
+  const [marketing,setMarketing] = useState(false); // acepta emails comerciales (opcional)
   const isES = lang==="es";
 
   const handle = async () => {
@@ -1589,11 +1619,12 @@ function AuthScreen({onAuth, lang}) {
     const pw = pass.trim();
     if(!em||!pw) { setErr(isES?"Rellena email y contraseña":"Fill in email and password"); return; }
     if(pw.length < 6) { setErr(isES?"La contraseña debe tener al menos 6 caracteres":"Password must be at least 6 characters"); return; }
+    if(mode==="register" && !terms) { setErr(isES?"Debes aceptar los términos para registrarte":"You must accept the terms to sign up"); return; }
     setLoading(true); setErr("");
     try {
       let res;
       if(mode==="register") {
-        res = await supa.signUp(em, pw);
+        res = await supa.signUp(em, pw, { terms_accepted:true, marketing_consent:marketing, consent_at:new Date().toISOString() });
         if(res.error) {
           setErr(res.error.message||"Error al registrarse");
           setLoading(false); return;
@@ -1664,6 +1695,19 @@ function AuthScreen({onAuth, lang}) {
           style={{width:"100%",padding:"14px 16px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,fontSize:14,color:C.white,outline:"none",fontFamily:FB,boxSizing:"border-box"}}
         />
 
+        {mode==="register"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:2}}>
+            <label style={{display:"flex",gap:10,alignItems:"flex-start",cursor:"pointer"}}>
+              <input type="checkbox" checked={terms} onChange={e=>setTerms(e.target.checked)} style={{marginTop:2,width:18,height:18,accentColor:C.accent,flexShrink:0}}/>
+              <span style={{fontSize:12,color:C.sub,lineHeight:1.5}}>{isES?"Acepto los términos y la política de privacidad.":"I accept the terms and privacy policy."}</span>
+            </label>
+            <label style={{display:"flex",gap:10,alignItems:"flex-start",cursor:"pointer"}}>
+              <input type="checkbox" checked={marketing} onChange={e=>setMarketing(e.target.checked)} style={{marginTop:2,width:18,height:18,accentColor:C.accent,flexShrink:0}}/>
+              <span style={{fontSize:12,color:C.sub,lineHeight:1.5}}>{isES?"Quiero recibir emails con novedades, subidas de precio y ofertas. Puedo darme de baja cuando quiera.":"I want to receive emails with news, price alerts and offers. I can unsubscribe anytime."}</span>
+            </label>
+          </div>
+        )}
+
         {err&&<div style={{
           background: err.startsWith("✅") ? "rgba(0,230,118,0.12)" : "rgba(255,82,82,0.12)",
           border: `1px solid ${err.startsWith("✅") ? C.accent+"66" : C.red+"44"}`,
@@ -1671,7 +1715,7 @@ function AuthScreen({onAuth, lang}) {
           color: err.startsWith("✅") ? C.accent : C.red
         }}>{err}</div>}
 
-        <button onClick={handle} disabled={loading||!email.trim()||!pass.trim()} style={{width:"100%",padding:"15px",background:email.trim()&&pass.trim()?C.accent:C.bg3,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:email.trim()&&pass.trim()?C.bg:C.hint,cursor:email.trim()&&pass.trim()?"pointer":"default",transition:"all .2s",marginTop:4}}>
+        <button onClick={handle} disabled={loading||!email.trim()||!pass.trim()||(mode==="register"&&!terms)} style={{width:"100%",padding:"15px",background:email.trim()&&pass.trim()&&(mode!=="register"||terms)?C.accent:C.bg3,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:email.trim()&&pass.trim()&&(mode!=="register"||terms)?C.bg:C.hint,cursor:email.trim()&&pass.trim()&&(mode!=="register"||terms)?"pointer":"default",transition:"all .2s",marginTop:4}}>
           {loading?"...":(mode==="login"?(isES?"Entrar →":"Sign in →"):(isES?"Crear cuenta →":"Create account →"))}
         </button>
 
