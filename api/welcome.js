@@ -85,6 +85,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         from: FROM,
         to: [email],
+        reply_to: "infocardgoal@gmail.com",
         subject: "¡Bienvenido a CardGoal! ⚽",
         html: welcomeHtml(),
       }),
