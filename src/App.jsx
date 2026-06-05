@@ -1381,8 +1381,8 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
             {added?t.added:t.add}
           </button>
           {/* Ver en eBay (enlace de afiliado) */}
-          <button onClick={()=>window.open(ebayLinkFor(card),"_blank","noopener")} style={{width:"100%",padding:"13px",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:14,fontWeight:700,color:C.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8}}>
-            🛒 {lang==="es"?"Ver en eBay":"View on eBay"}
+          <button onClick={()=>window.open(ebayLinkFor(card),"_blank","noopener")} style={{width:"100%",padding:"15px",background:"linear-gradient(135deg,#0064D2,#0053AE)",border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8,boxShadow:"0 6px 18px rgba(0,100,210,0.4)"}}>
+            🛒 {lang==="es"?"Comprar en eBay":"Buy on eBay"}
           </button>
           <div style={{fontSize:10,color:C.hint,textAlign:"center",marginTop:6}}>{lang==="es"?"Enlace de afiliado · CardGoal puede recibir una comisión":"Affiliate link · CardGoal may earn a commission"}</div>
           {/* WhatsApp share */}
@@ -1866,7 +1866,18 @@ function Home({col, nav, lang, isPremium, user, onInstallClick}) {
           );
         })()}
 
-        {/* Premium banner */}
+        {/* Banner comprar cromos en eBay (afiliado) */}
+        <button onClick={()=>window.open(ebayAffiliate("https://www.ebay.es/sch/i.html?_nkw="+encodeURIComponent("cromos fútbol")),"_blank","noopener")}
+          style={{width:"100%",marginTop:10,padding:"16px",background:"linear-gradient(135deg,#0064D2,#0053AE)",border:"none",borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 18px rgba(0,100,210,0.4)",transition:"transform .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+          onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
+          <div style={{width:40,height:40,borderRadius:12,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🛒</div>
+          <div style={{textAlign:"left"}}>
+            <div style={{fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff"}}>{isES?"Comprar cromos en eBay":"Buy cards on eBay"}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.9)",marginTop:2}}>{isES?"Miles de cromos de fútbol":"Thousands of football cards"}</div>
+          </div>
+          <div style={{marginLeft:"auto",fontSize:20,color:"#fff",flexShrink:0}}>›</div>
+        </button>
         {!isPremium&&<button onClick={()=>startCheckout(user?.email||"")} style={{width:"100%",padding:"16px",background:"linear-gradient(135deg,#1a0a2e,#2d1054)",border:`1px solid rgba(160,80,255,0.4)`,borderRadius:18,cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:"0 4px 20px rgba(120,40,200,0.2)",transition:"transform .15s"}}
           onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
           onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
