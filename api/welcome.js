@@ -56,20 +56,26 @@ function welcomeHtml() {
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  // Lee el email: por POST (registro real) o por GET ?test=email (prueba rápida)
+  let email = "";
+  if (req.method === "GET") {
+    email = req.query && req.query.test ? String(req.query.test).trim() : "";
+    if (!email) return res.status(405).json({ error: "Usa ?test=tu@email.com para enviar un correo de prueba" });
+  } else if (req.method === "POST") {
+    try {
+      const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+      email = (body.email || "").trim();
+    } catch { /* ignore */ }
+  } else {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   const key = process.env.RESEND_API_KEY;
   if (!key) return res.status(500).json({ error: "Falta RESEND_API_KEY en Vercel" });
-
-  // Leer el email del cuerpo (admite objeto o string)
-  let email = "";
-  try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    email = (body.email || "").trim();
-  } catch { /* ignore */ }
   if (!email) return res.status(400).json({ error: "Falta el email" });
 
   try {
@@ -85,7 +91,7 @@ export default async function handler(req, res) {
     });
     const data = await r.json();
     if (!r.ok) return res.status(502).json({ error: "Resend error", detail: data });
-    return res.status(200).json({ ok: true, id: data.id });
+    return res.status(200).json({ ok: true, id: data.id, sent_to: email });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
