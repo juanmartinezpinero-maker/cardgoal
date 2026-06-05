@@ -1604,6 +1604,39 @@ function GradeSheet({lang,setLang,userId,isPremium,onPaywall}) {
 /* ═══════════════════════════════════════════════════════════
    AUTH SCREEN — Login / Register
 ═══════════════════════════════════════════════════════════ */
+/* Modal con los Términos y la Política de Privacidad */
+function LegalModal({ onClose, lang }){
+  const S = ({title,children}) => (
+    <div style={{marginBottom:16}}>
+      <div style={{fontFamily:FD,fontSize:14,fontWeight:800,color:C.text,marginBottom:5}}>{title}</div>
+      <div style={{fontSize:13,color:C.sub,lineHeight:1.6}}>{children}</div>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.white,width:"100%",maxWidth:480,maxHeight:"86vh",overflowY:"auto",borderRadius:20,padding:"22px 22px 28px",color:C.text}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,position:"sticky",top:0,background:C.white,paddingBottom:8}}>
+          <div style={{fontFamily:FD,fontSize:18,fontWeight:800}}>Términos y Privacidad</div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:24,color:C.sub,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+
+        <S title="1. Quiénes somos">CardGoal (cardgoal.es) es una aplicación para valorar y llevar el control de tu colección de cromos de fútbol. Para cualquier cuestión puedes escribirnos a infocardgoal@gmail.com.</S>
+        <S title="2. El servicio">CardGoal te permite buscar, escanear y guardar cromos, y ver una estimación de su valor de mercado. Los precios son <strong>orientativos</strong>, se basan en datos de mercado (como eBay) y no constituyen una garantía ni asesoramiento de inversión.</S>
+        <S title="3. Datos que tratamos">Para crear tu cuenta tratamos tu <strong>email</strong> y tu <strong>contraseña</strong> (guardada cifrada). También guardamos los <strong>cromos y fotos</strong> que añades a tu colección. No pedimos más datos personales.</S>
+        <S title="4. Para qué los usamos">Para crear y gestionar tu cuenta, guardar tu colección, enviarte el email de bienvenida y, <strong>solo si lo aceptas</strong>, enviarte emails con novedades, cambios de precio y ofertas.</S>
+        <S title="5. Proveedores">Usamos servicios de terceros para funcionar: Supabase (cuentas y base de datos), Resend (envío de emails) y Anthropic (IA para identificar y valorar cromos). Tus datos se tratan conforme a sus políticas.</S>
+        <S title="6. Emails comerciales">Solo te enviamos emails comerciales si marcaste la casilla correspondiente al registrarte. Puedes <strong>darte de baja en cualquier momento</strong> desde el enlace del propio email o escribiéndonos.</S>
+        <S title="7. Enlaces de afiliado">Algunos enlaces a eBay son de afiliado: si compras a través de ellos, CardGoal puede recibir una pequeña comisión, <strong>sin ningún coste extra para ti</strong>.</S>
+        <S title="8. Tus derechos">Puedes acceder, corregir o eliminar tus datos y tu cuenta cuando quieras escribiéndonos a infocardgoal@gmail.com. También puedes borrar cromos de tu colección directamente en la app.</S>
+        <S title="9. Conservación">Conservamos tus datos mientras mantengas la cuenta. Si la eliminas, borramos los datos asociados.</S>
+        <S title="10. Cambios">Podemos actualizar estos términos; te avisaremos de los cambios relevantes.</S>
+
+        <div style={{fontSize:11,color:C.hint,marginTop:8}}>Última actualización: junio de 2026 · Contacto: infocardgoal@gmail.com</div>
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen({onAuth, lang}) {
   const [mode,setMode]   = useState("login"); // login | register
   const [email,setEmail] = useState("");
@@ -1612,6 +1645,7 @@ function AuthScreen({onAuth, lang}) {
   const [loading,setLoading] = useState(false);
   const [terms,setTerms]   = useState(false);   // acepta términos (obligatorio)
   const [marketing,setMarketing] = useState(false); // acepta emails comerciales (opcional)
+  const [showLegal,setShowLegal] = useState(false);
   const isES = lang==="es";
 
   const handle = async () => {
@@ -1699,7 +1733,10 @@ function AuthScreen({onAuth, lang}) {
           <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:2}}>
             <label style={{display:"flex",gap:10,alignItems:"flex-start",cursor:"pointer"}}>
               <input type="checkbox" checked={terms} onChange={e=>setTerms(e.target.checked)} style={{marginTop:2,width:18,height:18,accentColor:C.accent,flexShrink:0}}/>
-              <span style={{fontSize:12,color:C.sub,lineHeight:1.5}}>{isES?"Acepto los términos y la política de privacidad.":"I accept the terms and privacy policy."}</span>
+              <span style={{fontSize:12,color:C.sub,lineHeight:1.5}}>
+                {isES?"Acepto los ":"I accept the "}
+                <span onClick={e=>{e.preventDefault();e.stopPropagation();setShowLegal(true);}} style={{color:C.accent,fontWeight:600,textDecoration:"underline",cursor:"pointer"}}>{isES?"términos y la política de privacidad":"terms and privacy policy"}</span>.
+              </span>
             </label>
             <label style={{display:"flex",gap:10,alignItems:"flex-start",cursor:"pointer"}}>
               <input type="checkbox" checked={marketing} onChange={e=>setMarketing(e.target.checked)} style={{marginTop:2,width:18,height:18,accentColor:C.accent,flexShrink:0}}/>
@@ -1726,8 +1763,12 @@ function AuthScreen({onAuth, lang}) {
       </div>
 
       <div style={{marginTop:32,fontSize:11,color:C.hint,textAlign:"center",maxWidth:280,lineHeight:1.6}}>
-        {isES?"Al registrarte aceptas nuestros términos. Tu colección se guarda de forma segura en la nube.":"By signing up you accept our terms. Your collection is securely saved in the cloud."}
+        {isES?"Al registrarte aceptas nuestros ":"By signing up you accept our "}
+        <span onClick={()=>setShowLegal(true)} style={{color:C.sub,textDecoration:"underline",cursor:"pointer"}}>{isES?"términos y privacidad":"terms and privacy"}</span>.
+        {isES?" Tu colección se guarda de forma segura en la nube.":" Your collection is securely saved in the cloud."}
       </div>
+
+      {showLegal&&<LegalModal lang={lang} onClose={()=>setShowLegal(false)}/>}
     </div>
   );
 }
