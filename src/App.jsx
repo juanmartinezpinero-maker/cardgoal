@@ -1443,7 +1443,7 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
 }
 
 /* ─── GRADE SHEET ─────────────────────────────────────────── */
-function GradeSheet({lang,setLang,userId,isPremium,onPaywall}) {
+function GradeSheet({lang,setLang,userId,isPremium,onPaywall,gate,tally}) {
   const [ph,setPh]=useState("idle");
   const [durl,setDurl]=useState(null);
   const [res,setRes]=useState(null);
@@ -1452,12 +1452,13 @@ function GradeSheet({lang,setLang,userId,isPremium,onPaywall}) {
   const reset=()=>{setPh("idle");setDurl(null);setRes(null);setErr("");if(fileRef.current)fileRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
+    if(gate && !gate("grade")) return;           // límite invitado (3) → registro
     const compressed = await compressImage(file);
     const d = compressed || await toDataURL(file);
     setDurl(d);setPh("grading");
-    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");}
+    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");tally && tally("grade");}
     catch(e){setErr(e.message||"Error");setPh("error");}
-  },[lang]);
+  },[lang,gate,tally]);
 
   const isES=lang==="es";
   const T={
@@ -1637,7 +1638,43 @@ function LegalModal({ onClose, lang }){
   );
 }
 
-function AuthScreen({onAuth, lang}) {
+/* Pop-up que pide una propina (Ko-fi) a usuarios que usan mucho la app */
+function TipModal({ lang, onClose }){
+  const isES = lang==="es";
+  const open=()=>{ window.open("https://ko-fi.com/cardgoal","_blank","noopener"); onClose(); };
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:420,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.white,width:"100%",maxWidth:380,borderRadius:22,padding:"26px 24px 24px",color:C.text,textAlign:"center"}}>
+        <div style={{fontSize:46,marginBottom:10}}>☕</div>
+        <div style={{fontFamily:FD,fontSize:20,fontWeight:800,marginBottom:8}}>{isES?"¿Te gusta CardGoal?":"Enjoying CardGoal?"}</div>
+        <div style={{fontSize:14,color:C.sub,lineHeight:1.6,marginBottom:20}}>{isES?"Es gratis y sin anuncios molestos. Si te está siendo útil, invítanos a un café y nos ayudas a mantenerla en marcha 🙏":"It's free and ad-free. If it's useful to you, buy us a coffee to help keep it running 🙏"}</div>
+        <button onClick={open} style={{width:"100%",padding:"15px",background:"linear-gradient(135deg,#FF6B6B,#E8484A)",border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:"0 6px 18px rgba(232,72,74,0.4)",marginBottom:8}}>
+          {isES?"Apoyar con una propina":"Support with a tip"}
+        </button>
+        <button onClick={onClose} style={{width:"100%",padding:"10px",background:"none",border:"none",fontSize:13,color:C.sub,cursor:"pointer",fontWeight:600}}>
+          {isES?"Ahora no":"Not now"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* Colección cuando el usuario aún no tiene cuenta — invita a registrarse */
+function GuestCollectionCTA({ lang, onRegister }){
+  const isES = lang==="es";
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px 28px"}}>
+      <div style={{width:84,height:84,borderRadius:24,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:16}}>🗂️</div>
+      <div style={{fontFamily:FD,fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>{isES?"Guarda tu colección":"Save your collection"}</div>
+      <div style={{fontSize:14,color:C.sub,lineHeight:1.6,maxWidth:330,marginBottom:20}}>{isES?"Crea una cuenta gratis para guardar tus cromos y ver el valor total de tu colección desde cualquier dispositivo.":"Create a free account to save your cards and see your collection's total value on any device."}</div>
+      <button onClick={onRegister} style={{padding:"15px 30px",background:C.accent,border:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",boxShadow:`0 6px 18px ${C.accent}55`}}>
+        {isES?"Crear cuenta gratis":"Create free account"}
+      </button>
+    </div>
+  );
+}
+
+function AuthScreen({onAuth, lang, onClose}) {
   const [mode,setMode]   = useState("login"); // login | register
   const [email,setEmail] = useState("");
   const [pass,setPass]   = useState("");
@@ -1697,12 +1734,13 @@ function AuthScreen({onAuth, lang}) {
   };
 
   return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",background:C.bg}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",background:C.bg,position:"relative",minHeight:"100vh"}}>
+      {onClose&&<button onClick={onClose} style={{position:"absolute",top:18,right:18,width:40,height:40,borderRadius:12,background:C.bg3,border:`1px solid ${C.border}`,color:C.sub,fontSize:20,cursor:"pointer",lineHeight:1}}>✕</button>}
       {/* Logo */}
       <div style={{textAlign:"center",marginBottom:40}}>
         <div style={{width:72,height:72,borderRadius:20,background:`linear-gradient(135deg,${C.bg3},${C.bg2})`,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px",boxShadow:C.shadowM}}>⚽</div>
         <div style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.white,letterSpacing:"-0.02em"}}>CardGoal</div>
-        <div style={{fontSize:13,color:C.sub,marginTop:6}}>{isES?"Tu portfolio de cromos de fútbol":"Your football card portfolio"}</div>
+        <div style={{fontSize:13,color:C.sub,marginTop:6}}>{isES?"Crea tu cuenta gratis para guardar tu colección":"Create your free account to save your collection"}</div>
       </div>
 
       {/* Toggle */}
@@ -2033,7 +2071,7 @@ function Home({col, nav, lang, isPremium, user, onInstallClick}) {
 }
 
 /* SEARCH */
-function Search({onAdd, addedIds, onTap, lang}) {
+function Search({onAdd, addedIds, onTap, lang, tally}) {
   const [q,setQ]       = useState("");
   const [cards,setCards] = useState([]);
   const [st,setSt]     = useState("idle");
@@ -2043,6 +2081,7 @@ function Search({onAdd, addedIds, onTap, lang}) {
 
   const go = async () => {
     const query=q.trim(); if(!query) return;
+    tally && tally("search");
     setSt("loading"); setCards([]);
     // 1) Catálogo interno (instantáneo)
     const local = searchCards(query);
@@ -2141,7 +2180,7 @@ function Search({onAdd, addedIds, onTap, lang}) {
 }
 
 /* SCANNER */
-function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
+function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   const [ph,setPh]=useState("idle");
   const [durl,setDurl]=useState(null);
   const [card,setCard]=useState(null);
@@ -2153,6 +2192,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
   const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);if(fileRef.current)fileRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
+    if(gate && !gate("scan")) return;            // límite invitado (5) → registro
     // Check freemium limit
     if(!canScan(userId, isPremium)) { onPaywall&&onPaywall(); return; }
     // Compress image first
@@ -2163,10 +2203,11 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
       const b64=d.split(",")[1];
       const c=await scanCard(b64,"image/jpeg");setCard(c);setPh("pricing");
       incrementScan(userId); // count usage
+      tally && tally("scan");
       let p=null;try{p=await fetchPrice(c);}catch{}
       setPrice(p);setPh("result");
     }catch(e){setErr(e.message==="NO_CARD"?(isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card."):(isES?"No pude identificarla. Prueba con más luz.":"Couldn't identify it. Try better lighting."));setPh("error");}
-  },[lang]);
+  },[lang,gate,tally]);
 
   if(ph==="idle")return(
     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28,gap:16,background:C.bg2}}>
@@ -2276,7 +2317,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall}) {
 }
 
 /* COLLECTION */
-function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating}) {
+function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating, isGuest, onRegister}) {
   const [filt,setFilt]=useState("all");
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
@@ -2311,8 +2352,19 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
           </div>
         </div>
 
+        {/* Aviso para invitados: regístrate para guardar de verdad */}
+        {isGuest&&(
+          <button onClick={onRegister} style={{width:"100%",marginTop:12,padding:"12px 14px",background:`${C.accent}1A`,border:`1px solid ${C.accent}55`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
+            <span style={{fontSize:18}}>💾</span>
+            <div>
+              <div style={{fontFamily:FD,fontSize:12,fontWeight:800,color:C.accent}}>{isES?"Estás probando como invitado":"You're trying as a guest"}</div>
+              <div style={{fontSize:10,color:C.sub,marginTop:1}}>{isES?"Crea una cuenta gratis para guardar tu colección de verdad":"Create a free account to save your collection"}</div>
+            </div>
+          </button>
+        )}
+
         {/* Update prices button — full width, premium design */}
-        {onUpdatePrices&&col.length>0&&(
+        {onUpdatePrices&&!isGuest&&col.length>0&&(
           <button onClick={onUpdatePrices} disabled={isUpdating} style={{
             width:"100%",marginTop:12,padding:"12px 16px",
             background:isUpdating?"transparent":`linear-gradient(135deg,${C.bg3},${C.bg2})`,
@@ -2418,6 +2470,8 @@ export default function CardGoal() {
   // Instalación PWA: capturamos el evento de Android para poder ofrecer el botón
   const [deferredInstall,setDeferredInstall] = useState(null);
   const [showInstallModal,setShowInstallModal] = useState(false);
+  const [showAuth,setShowAuth] = useState(false); // modo invitado: registro solo cuando hace falta
+  const [showTip,setShowTip] = useState(false);   // pop-up de propina (Ko-fi) para registrados
   useEffect(()=>{
     const h=(e)=>{ e.preventDefault(); setDeferredInstall(e); };
     const done=()=>{ setDeferredInstall(null); setShowInstallModal(false); };
@@ -2464,6 +2518,7 @@ export default function CardGoal() {
     const isPremium = await checkPremium(userData.email).catch(()=>false);
     const fullUser = {...userData, isPremium};
     setUser(fullUser);
+    setShowAuth(false);
     window._cgUserEmail = userData.email; // for Stripe checkout
     try { localStorage.setItem("cardgoal_user", JSON.stringify(fullUser)); } catch {}
   },[]);
@@ -2494,22 +2549,41 @@ export default function CardGoal() {
     try { localStorage.removeItem("cardgoal_user"); } catch {}
   },[user]);
 
+  // Límites para invitados (protege la API y empuja registro) y cadencia de propina
+  const gate = useCallback((kind)=>{
+    if(user) return true;                       // registrados: sin límite de invitado
+    const lim = {scan:5, grade:3, save:2}[kind];
+    if(lim==null) return true;                  // p.ej. búsqueda: sin límite
+    let n=0; try{ n=Number(localStorage.getItem(`cg_g_${kind}`)||0); }catch{}
+    if(n>=lim){ setShowAuth(true); return false; }
+    try{ localStorage.setItem(`cg_g_${kind}`,String(n+1)); }catch{}
+    return true;
+  },[user]);
+
+  const tally = useCallback((kind)=>{
+    if(!user) return;                           // propina solo a registrados
+    const every = {search:4, scan:4, save:4, grade:3}[kind];
+    if(!every) return;
+    let n=0; try{ n=Number(sessionStorage.getItem(`cg_t_${kind}`)||0); }catch{}
+    n+=1;
+    try{ sessionStorage.setItem(`cg_t_${kind}`,String(n)); }catch{}
+    if(n%every===0) setShowTip(true);
+  },[user]);
+
   const addCard = useCallback(async card => {
+    if(!gate("save")) return;                   // invitado: máx 2, luego registro
     const uid = card._uid||`uid_${Date.now()}`;
     const newCard = {...card, _uid:uid};
     setCol(prev=>[...prev,newCard]);
     setAdded(prev=>new Set([...prev,uid]));
-    // Save to Supabase if logged in
-    if(user?.token && user?.id) {
+    if(user?.token && user?.id) {               // registrado: guardar en la nube
       try {
         const res = await supa.saveCard(newCard, user.token, user.id);
-        // Update _dbId with the real Supabase id for later deletion
-        if(res && res[0]?.id) {
-          setCol(prev=>prev.map(c=>c._uid===uid?{...c,_dbId:res[0].id}:c));
-        }
+        if(res && res[0]?.id) setCol(prev=>prev.map(c=>c._uid===uid?{...c,_dbId:res[0].id}:c));
       } catch(e) { console.error('saveCard error:', e); }
     }
-  },[user]);
+    tally("save");
+  },[user, gate, tally]);
 
   const removeCard = useCallback(async uid => {
     const card = col.find(c=>c._uid===uid);
@@ -2596,6 +2670,9 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
           {user&&<button onClick={handleLogout} style={{padding:"6px 12px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,fontSize:11,fontWeight:600,color:C.sub,cursor:"pointer",fontFamily:FD}}>
             {isES?"Salir":"Logout"}
           </button>}
+          {!user&&<button onClick={()=>setShowAuth(true)} style={{padding:"7px 16px",background:C.accent,border:"none",borderRadius:10,fontSize:12,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:FD}}>
+            {isES?"Entrar":"Sign in"}
+          </button>}
         </div>
       </div>
 
@@ -2603,19 +2680,24 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
           {user&&(window._cgUserEmail=user.email,null)}
-          {!user ? (
-            <AuthScreen onAuth={handleAuth} lang={lang}/>
-          ) : (
-            <>
-              <InstallPrompt lang={lang} deferred={deferredInstall}/>
-              {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user} onInstallClick={()=>setShowInstallModal(true)}/>}
-              {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang}/>}
-              {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")}/>}
-              {screen==="collection" &&<Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices}/>}
-              {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")}/>}
-            </>
-          )}
+          <>
+            <InstallPrompt lang={lang} deferred={deferredInstall}/>
+            {screen==="home"       &&<Home       col={col} nav={setScreen} lang={lang} isPremium={isPremium} user={user} onInstallClick={()=>setShowInstallModal(true)}/>}
+            {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang} tally={tally}/>}
+            {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")} gate={gate} tally={tally}/>}
+            {screen==="collection" &&((user||col.length>0)
+              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)}/>
+              : <GuestCollectionCTA lang={lang} onRegister={()=>setShowAuth(true)}/>)}
+            {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")} gate={gate} tally={tally}/>}
+          </>
         </div>
+
+        {/* Registro como pantalla superpuesta (solo cuando hace falta) */}
+        {showAuth && !user && (
+          <div style={{position:"fixed",inset:0,zIndex:350,background:C.bg,overflowY:"auto",maxWidth:600,margin:"0 auto",left:"50%",transform:"translateX(-50%)",width:"100%"}}>
+            <AuthScreen onAuth={handleAuth} lang={lang} onClose={()=>setShowAuth(false)}/>
+          </div>
+        )}
 
         {/* CARD DETAIL SHEET */}
         {modal&&<div style={{position:"fixed",inset:0,zIndex:300,background:C.white,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto",left:"50%",transform:"translateX(-50%)",width:"100%"}}>
@@ -2653,6 +2735,9 @@ Si no conoces el precio de alguna carta pon null para ese objeto.`
 
       {/* Pop-up de instalación */}
       {showInstallModal&&<InstallModal lang={lang} deferred={deferredInstall} onClose={()=>setShowInstallModal(false)}/>}
+
+      {/* Pop-up de propina (Ko-fi) para usuarios registrados */}
+      {showTip&&<TipModal lang={lang} onClose={()=>setShowTip(false)}/>}
     </div>
   );
 }
