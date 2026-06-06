@@ -310,8 +310,8 @@ function jparse(raw) {
 }
 
 /* ─── AI ──────────────────────────────────────────────────── */
-async function callAI(msgs, search=false, maxTok=800) {
-  const body = { model:"claude-opus-4-7", max_tokens:maxTok, messages:msgs };
+async function callAI(msgs, search=false, maxTok=800, model="claude-haiku-4-5-20251001") {
+  const body = { model, max_tokens:maxTok, messages:msgs };
   if (search) body.tools = [{type:"web_search_20250305",name:"web_search"}];
   const r = await fetch("/api/anthropic",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   if (!r.ok) { const e=await r.json().catch(()=>{}); throw new Error(e?.error?.message||`HTTP ${r.status}`); }
@@ -828,7 +828,7 @@ SOLO JSON en español: {"centering":8.5,"corners":9,"edges":8,"surface":9,"predi
       : `Professional PSA/BGS grader. Analyze this football card (4 criteria 1-10: centering, corners, edges, surface). Estimate PSA grade.
 ONLY JSON in English: {"centering":8.5,"corners":9,"edges":8,"surface":9,"predictedGrade":8,"gradeLabel":"NM-MT 8","worthGrading":true,"gradingCost":25,"centeringDetail":"desc","cornersDetail":"desc","edgesDetail":"desc","surfaceDetail":"desc","mainIssue":"issue","recommendation":"rec","rawValue":45,"gradedValue":120,"gradedValueLabel":"PSA 8"}`
     }
-  ]}], false, 800);
+  ]}], false, 800, "claude-sonnet-4-6");
   const g = jparse(raw);
   if (!g||!g.predictedGrade) throw new Error(isES?"No se pudo analizar":"Could not analyze");
   return g;
