@@ -716,41 +716,52 @@ async function fetchPrice(card) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: Sonnet + búsqueda web → ventas cerradas reales en eBay ──
-  // Búsqueda real de lo que se ha vendido, como cuando tú pasas la carta a ChatGPT
+  // ── PASO 2: eBay ventas CERRADAS (precios reales de lo que se ha vendido) → ~1-2s ──
   try {
-    const isAuto   = /auto/i.test(card.rarity||"");
-    const isPrizm  = /prizm|refract|holo|silver|gold/i.test(card.rarity||"");
-    const isRookie = /rookie|\brc\b/i.test(card.rarity||"");
-    const cardCtx  = serial
-      ? `CARTA NUMERADA ${serial} — existen solo ${serial.replace("/","")} copias. Es rarísima y vale mucho más que la versión base.`
-      : `Carta ${isAuto?"AUTO ":""}${isPrizm?"PRIZM/REFRACTOR ":""}${isRookie?"ROOKIE ":""}sin gradear (RAW). No es PSA/BGS/CGC.`;
-
-    const searchQ = [card.player, card.manufacturer, serial||"", isAuto?"auto":""].filter(Boolean).join(" ");
-
-    const raw = await callAI([{role:"user", content:
-`Busca en eBay el precio real de esta carta de fútbol.
-
-Carta: ${desc}
-${cardCtx}
-
-Haz una búsqueda de ventas CERRADAS (sold/completed) en eBay para: "${searchQ}"
-IMPORTANTE: excluye listados que mencionan PSA, BGS, CGC, graded o slab — quiero precio de carta RAW.
-Convierte USD a EUR (×0.92), GBP a EUR (×1.17).
-Calcula la mediana de las últimas ventas encontradas (últimos 6 meses).
-
-Responde SOLO con JSON:
-{"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"eBay sold (N ventas)"}
-Si no hay ventas de esta carta específica: {"priceEur":null}`
-    }], true, 350, "claude-sonnet-4-6");
-
-    const p = jparse(raw);
-    if (p && isPriceOk(num(p.priceEur), card)) {
-      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:p.priceSource||"eBay sold", changeWeek:0, changeMonth:0});
+    const isAuto  = /auto/i.test(card.rarity||"");
+    const searchQ = [card.player, card.manufacturer||"", isAuto?"auto":"", serial||""]
+                      .filter(Boolean).join(" ").trim();
+    const r = await fetch(`/api/ebay-sold?q=${encodeURIComponent(searchQ)}`);
+    if (r.ok) {
+      const data   = await r.json();
+      const prices = (data.results||[])
+        .map(it => it.priceEur).filter(p => p && isPriceOk(p, card)).sort((a,b)=>a-b);
+      if (prices.length >= 2) {
+        const median = prices[Math.floor(prices.length/2)];
+        const latest = (data.results||[]).find(it => it.endTime && isPriceOk(it.priceEur,card));
+        const lastSoldDays = latest?.endTime
+          ? Math.round((Date.now()-new Date(latest.endTime).getTime())/86400000)
+          : null;
+        return save({priceEur:median, priceMin:prices[0], pricePrem:prices[prices.length-1],
+          priceSource:`eBay sold · ${prices.length} ventas reales`,
+          soldCount:prices.length, lastSoldDays, changeWeek:0, changeMonth:0});
+      }
     }
   } catch {}
 
-  // ── PASO 3: eBay API activa filtrada ──
+  // ── PASO 3: Sonnet + búsqueda web (si eBay no tiene suficientes ventas) → ~4-6s ──
+  try {
+    const isAuto  = /auto/i.test(card.rarity||"");
+    const cardCtx = serial
+      ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo).`
+      : `Sin gradear (RAW). No PSA/BGS/CGC.`;
+    const searchQ = [card.player, card.manufacturer, isAuto?"auto":"", serial||""].filter(Boolean).join(" ");
+    const raw = await callAI([{role:"user",content:
+`Busca en eBay ventas CERRADAS de: "${searchQ}"
+Carta: ${desc} — ${cardCtx}
+Excluye PSA/BGS/CGC gradeadas. Calcula mediana. USD×0.92=EUR.
+Solo JSON: {"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"eBay sold (N ventas)"}
+Sin ventas: {"priceEur":null}`
+    }], true, 300, "claude-sonnet-4-6");
+    const p = jparse(raw);
+    if (p && isPriceOk(num(p.priceEur), card)) {
+      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65),
+        pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5),
+        priceSource:p.priceSource||"eBay sold", changeWeek:0, changeMonth:0});
+    }
+  } catch {}
+
+  // ── PASO 4: eBay activo filtrado ──
   try {
     const hints = [card.player, card.manufacturer||card.collection, /auto/i.test(card.rarity||"")?"auto":"", serial||""].filter(Boolean).join(" ");
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(hints)}`);
@@ -761,12 +772,12 @@ Si no hay ventas de esta carta específica: {"priceEur":null}`
         .map(it => parseEbayPrice(it.price)).filter(p => p && isPriceOk(p, card)).sort((a,b)=>a-b);
       if (prices.length > 0) {
         const median = prices[Math.floor(prices.length/2)];
-        return save({priceEur:median, priceMin:Math.round(median*.65), pricePrem:Math.round(median*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
+        return save({priceEur:median, priceMin:Math.round(median*.65), pricePrem:Math.round(median*1.5), priceSource:"eBay activo", changeWeek:0, changeMonth:0});
       }
     }
   } catch {}
 
-  // ── PASO 4: estimación por rareza — nunca da 1/2/3 ni precios imposibles ──
+  // ── PASO 5: estimación por rareza ──
   return save({...rarityEstimate(card), changeWeek:0, changeMonth:0, isEstimate:true});
 }
 
@@ -2248,11 +2259,16 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
                     : (card.priceEur&&<div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{eur(card.priceEur)}</div>)}
                 </div>
               </div>
-              {/* Add */}
-              <div style={{padding:"10px 16px 14px"}}>
+              {/* Botones: Añadir + Comprar en eBay (solo para cartas de eBay) */}
+              <div style={{padding:"10px 16px 14px", display:"flex", flexDirection:"column", gap:8}}>
                 <button onClick={()=>onAdd(card._fromEbay?{...card,priceEur:null,price:null}:{...card})} disabled={isAdded} style={{width:"100%",padding:"12px",background:isAdded?C.accentL:C.accent,border:isAdded?`1.5px solid ${C.accent}`:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:isAdded?C.accent:"#fff",cursor:isAdded?"default":"pointer",transition:"all .2s"}}>
                   {isAdded?(isES?"✓ En tu colección":"✓ In collection"):(isES?"+ Añadir a colección":"+ Add to collection")}
                 </button>
+                {card._fromEbay&&(
+                  <button onClick={()=>window.open(ebayLinkFor(card),"_blank","noopener")} style={{width:"100%",padding:"12px",background:"linear-gradient(135deg,#0064D2,#0053AE)",border:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    🛒 {isES?"Comprar en eBay":"Buy on eBay"}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -2374,14 +2390,29 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
         <div style={{padding:"16px"}}>
           {p!=null?<>
             <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,boxShadow:C.shadow}}>
-              <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{isES?"Precio de mercado":"Market price"}</div>
-              <div style={{fontFamily:FD,fontSize:32,fontWeight:800,color:C.text,margin:"4px 0"}}>{eur(p)}</div>
-              {price?.priceSource&&<div style={{fontSize:10,color:C.accent,fontWeight:600}}>📊 {price.priceSource}</div>}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{isES?"Precio de mercado":"Market price"}</div>
+                {price?.soldCount
+                  ? <span style={{fontSize:10,fontWeight:700,color:"#0064D2",background:"#0064D215",padding:"2px 8px",borderRadius:6,border:"1px solid #0064D230"}}>📊 {price.soldCount} ventas reales eBay</span>
+                  : <span style={{fontSize:10,fontWeight:600,color:price?.isEstimate?"#f59e0b":C.accent}}>
+                      {price?.isEstimate?"⏳ Estimación orientativa":"📊 "+( price?.priceSource||"")}
+                    </span>}
+              </div>
+              <div style={{fontFamily:FD,fontSize:36,fontWeight:800,color:C.text,margin:"2px 0 4px"}}>{eur(p)}</div>
+              {price?.lastSoldDays!=null&&<div style={{fontSize:10,color:C.sub}}>
+                ✅ Última venta hace <b>{price.lastSoldDays}</b> {price.lastSoldDays===1?"día":"días"} · Precios reales de ventas cerradas
+              </div>}
+              {!price?.soldCount&&price?.priceSource&&<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:2}}>
+                {price.priceSource}
+              </div>}
             </div>
             {num(price?.priceMin)!=null&&<div style={{display:"flex",gap:8,marginBottom:12}}>
-              <PriceTag value={price.priceMin} label={isES?"Mínimo":"Minimum"}/>
-              <PriceTag value={p} label={isES?"Medio":"Average"} highlight/>
-              <PriceTag value={price.pricePrem} label={isES?"Premium":"Premium"}/>
+              <PriceTag value={price.priceMin} label={isES?"Mínimo":"Low"}/>
+              <PriceTag value={p} label={isES?"Mediana":"Median"} highlight/>
+              <PriceTag value={price.pricePrem} label={isES?"Máximo":"High"}/>
+            </div>}
+            {price?.soldCount&&<div style={{fontSize:10,color:C.sub,marginBottom:12,textAlign:"center"}}>
+              Rango basado en {price.soldCount} ventas reales · Carta sin gradear (raw)
             </div>}
           </>:<div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,textAlign:"center",boxShadow:C.shadow}}>
             <div style={{fontSize:13,color:C.sub}}>{isES?"No encontré precio de mercado.":"No market price found."}</div>
