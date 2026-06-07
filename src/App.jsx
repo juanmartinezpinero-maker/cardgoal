@@ -716,32 +716,71 @@ async function fetchPrice(card) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: Sonnet — conoce el mercado, respuesta consistente ──
+  // ── PASO 2: eBay real — misma API que ya funciona en búsqueda, query específica ──
   try {
-    const serialCtx = serial
-      ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo — rarísima).`
-      : `Carta sin gradear (RAW). No PSA/BGS/CGC.`;
-    const raw = await callAI([{role:"user",content:
-`Eres experto en cartas de fútbol coleccionables. Precio de mercado en EUR de esta carta sin gradear.
+    // Query lo más específica posible con todos los datos de la carta
+    const isAuto = /auto/i.test(card.rarity||"");
+    const queryParts = [
+      card.player,
+      card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
+      card.collection  && card.collection !=="?" ? card.collection  : "",
+      card.season      && card.season      !=="?" ? card.season      : "",
+      isAuto ? "auto" : "",
+      serial || ""
+    ].filter(Boolean);
+    const searchQ = queryParts.join(" ").trim();
 
-Carta: ${desc}
-${serialCtx}
+    const r = await fetch(`/api/ebay?q=${encodeURIComponent(searchQ)}`);
+    if(r.ok) {
+      const data = await r.json();
+      const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
+      const hasAuto = /auto/i.test(card.rarity||"");
+      const prices = (data.results||[])
+        .filter(it =>
+          it.price &&
+          !GRADED_PAT.test(it.title||"") &&
+          !EBAY_BAD.test(it.title||"") &&
+          // Si la carta NO tiene auto, excluir listings con auto (evita precios inflados)
+          (hasAuto || !/\bauto\b|\bautograph\b|\bfirm/i.test(it.title||"")) &&
+          (lastName.length < 3 || (it.title||"").toLowerCase().includes(lastName))
+        )
+        .map(it => parseEbayPrice(it.price))
+        .filter(p => p && isPriceOk(p, card))
+        .sort((a,b) => a-b);
 
-Responde SOLO con JSON:
-{"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"Estimación mercado"}`
-    }], false, 200, "claude-sonnet-4-6");
-    const p = jparse(raw);
-    if (p && isPriceOk(num(p.priceEur), card)) {
-      return save({
-        priceEur:num(p.priceEur),
-        priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65),
-        pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5),
-        priceSource:"Estimación mercado", changeWeek:0, changeMonth:0
-      });
+      if(prices.length >= 1) {
+        const median = prices[Math.floor(prices.length/2)];
+        return save({
+          priceEur: median,
+          priceMin: prices[0],
+          pricePrem: prices[prices.length-1],
+          priceSource: `eBay · ${prices.length} anuncio${prices.length>1?"s":""}`,
+          changeWeek:0, changeMonth:0
+        });
+      }
     }
   } catch {}
 
-  // ── PASO 3: estimación por rareza (último recurso estable) ──
+  // ── PASO 3: Sonnet solo si eBay no encuentra nada ──
+  try {
+    const serialCtx = serial
+      ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo).`
+      : `Sin gradear (RAW).`;
+    const raw = await callAI([{role:"user",content:
+`Experto en cartas de fútbol coleccionables. Precio EUR sin gradear.
+Carta: ${desc} — ${serialCtx}
+Endrick/Yamal/Vinicius/Bellingham: autos numerados valen 150-800€+ según rareza.
+SOLO JSON: {"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"Estimación"}`
+    }], false, 150, "claude-sonnet-4-6");
+    const p = jparse(raw);
+    if(p && isPriceOk(num(p.priceEur), card)) {
+      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65),
+        pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5),
+        priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0});
+    }
+  } catch {}
+
+  // ── PASO 4: rareza como último recurso ──
   return save({...rarityEstimate(card), changeWeek:0, changeMonth:0, isEstimate:true});
 }
 
@@ -2471,19 +2510,24 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
           {p!=null?<>
             <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,boxShadow:C.shadow}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{isES?"Precio de mercado":"Market price"}</div>
+                <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                  {price?.soldCount?(isES?"Precio de venta real":"Real sold price"):price?.isEstimate?(isES?"Estimación orientativa":"Estimate"):(isES?"Anuncio activo eBay":"eBay active listing")}
+                </div>
                 {price?.soldCount
-                  ? <span style={{fontSize:10,fontWeight:700,color:"#0064D2",background:"#0064D215",padding:"2px 8px",borderRadius:6,border:"1px solid #0064D230"}}>📊 {price.soldCount} ventas reales eBay</span>
-                  : <span style={{fontSize:10,fontWeight:600,color:price?.isEstimate?"#f59e0b":C.accent}}>
-                      {price?.isEstimate?"⏳ Estimación orientativa":"📊 "+( price?.priceSource||"")}
-                    </span>}
+                  ? <span style={{fontSize:10,fontWeight:700,color:"#0064D2",background:"#0064D215",padding:"2px 8px",borderRadius:6,border:"1px solid #0064D230"}}>📊 {price.soldCount} ventas cerradas</span>
+                  : price?.isEstimate
+                    ? <span style={{fontSize:10,fontWeight:600,color:"#f59e0b"}}>⚡ IA estimate</span>
+                    : <span style={{fontSize:10,fontWeight:600,color:C.accent}}>🛒 Precio pedido · verifica en eBay</span>}
               </div>
               <div style={{fontFamily:FD,fontSize:36,fontWeight:800,color:C.text,margin:"2px 0 4px"}}>{eur(p)}</div>
               {price?.lastSoldDays!=null&&<div style={{fontSize:10,color:C.sub}}>
-                ✅ Última venta hace <b>{price.lastSoldDays}</b> {price.lastSoldDays===1?"día":"días"} · Precios reales de ventas cerradas
+                ✅ Última venta hace <b>{price.lastSoldDays}</b> {price.lastSoldDays===1?"día":"días"}
               </div>}
-              {!price?.soldCount&&price?.priceSource&&<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:2}}>
-                {price.priceSource}
+              {!price?.soldCount&&!price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
+                {isES?"Precio que pide el vendedor, no precio vendido":"Seller asking price, not sold price"}
+              </div>}
+              {price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
+                {isES?"Sin datos en eBay — estimación por rareza":"No eBay data — rarity estimate"}
               </div>}
             </div>
             {num(price?.priceMin)!=null&&<div style={{display:"flex",gap:8,marginBottom:12}}>
@@ -2541,9 +2585,14 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
       <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,flexShrink:0,padding:"14px 18px 10px"}}>
         <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.white}}>{isES?"Mi Colección":"My Collection"}</div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
-          <div style={{display:"flex",alignItems:"baseline",gap:8}}>
-            <span style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent}}>{eur(total)}</span>
-            <span style={{fontSize:13,color:C.sub}}>{col.length} {isES?"cartas":"cards"}</span>
+          <div>
+            <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+              <span style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent}}>{eur(total)}</span>
+              <span style={{fontSize:13,color:C.sub}}>{col.length} {isES?"cartas":"cards"}</span>
+            </div>
+            <div style={{fontSize:10,color:C.sub,marginTop:2}}>
+              {isES?"Valor orientativo · precios de anuncios eBay":"Approximate value · eBay listing prices"}
+            </div>
           </div>
         </div>
 
@@ -2818,9 +2867,10 @@ RANGOS DE REFERENCIA:
 - Prizm/Refractor/Foil: 4-15€ | jugador top: 15-60€
 - Rookie prometedor: 10-60€ | Rookie top: 30-200€
 - Auto sin numerar: 15-100€ | jugador top: 80-500€
-- Auto /99: 25-150€ | Auto /25: 80-500€ | Auto /10: 200-1000€ | Auto /5: 500-3000€
-- Numerada sin auto: aprox. 30% del precio del auto equivalente
+- Auto /99: 30-150€ | Auto /50: 80-350€ | Auto /25: 150-600€ | Auto /10: 300-1500€ | Auto /5: 600-3000€
+- Numerada sin auto: aprox. 25-30% del precio del auto equivalente
 - Vintage/clásico (antes del 2010): puede valer 2-5x más según el jugador
+- MUY IMPORTANTE — jugadores calientes en mercado actual: Endrick (Real Madrid), Lamine Yamal, Bellingham, Vinicius Jr — sus autos numerados valen ×2-4 sobre el rango base mínimo
 
 Devuelve SOLO un JSON array con exactamente ${col.length} objetos en el mismo orden:
 [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
