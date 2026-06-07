@@ -256,10 +256,14 @@ function ebayAffiliate(url){
   }
 }
 function ebayLinkFor(card){
-  if(card && card._ebayUrl) return ebayAffiliate(card._ebayUrl);   // anuncio concreto
-  const q = [card?.player, card?.season, card?.manufacturer, card?.collection, (card?.rarity&&card.rarity!=="Base"?card.rarity:"")]
-    .filter(Boolean).join(" ").trim() || (card?.player||"");
-  return ebayAffiliate("https://www.ebay.es/sch/i.html?_nkw="+encodeURIComponent(q));  // búsqueda del cromo
+  // Siempre construir URL de búsqueda (nunca anuncio concreto — pueden caducar y eBay muestra artículos aleatorios)
+  const parts = [card?.player];
+  if(card?.manufacturer && card.manufacturer!=="?") parts.push(card.manufacturer);
+  if(card?.collection   && card.collection!=="?")   parts.push(card.collection);
+  if(card?.rarity       && card.rarity!=="Base")    parts.push(card.rarity);
+  if(card?.serialNumber && String(card.serialNumber)!=="null") parts.push(card.serialNumber);
+  const q = parts.filter(Boolean).join(" ").trim() || "cromos fútbol";
+  return ebayAffiliate("https://www.ebay.es/sch/i.html?_nkw="+encodeURIComponent(q));
 }
 
 async function checkPremium(email) {
@@ -1066,7 +1070,7 @@ async function ebaySearchCards(query) {
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(query)}`);
     if (!r.ok) return [];
     const data = await r.json();
-    const list = (data.results || []).filter(it => it.image && !EBAY_BAD.test(it.title || ""));
+    const list = (data.results || []).filter(it => it.image && !EBAY_BAD.test(it.title || "") && !GRADED_PAT.test(it.title || ""));
     return list.slice(0, 6).map((it, i) => {
       const T = (it.title || "").toLowerCase();
       let rarity = "Base";
