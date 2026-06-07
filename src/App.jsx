@@ -716,80 +716,32 @@ async function fetchPrice(card) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: eBay ventas CERRADAS con query específica + filtro de relevancia ──
+  // ── PASO 2: Sonnet — conoce el mercado, respuesta consistente ──
   try {
-    const isAuto  = /auto/i.test(card.rarity||"");
-    // Query específica con todos los datos disponibles (evita mezclar cartas distintas)
-    const searchParts = [
-      card.player,
-      card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
-      card.collection  && card.collection !=="?" ? card.collection  : "",
-      card.season      && card.season      !=="?" ? card.season      : "",
-      isAuto ? "auto" : "",
-      serial || ""
-    ];
-    const searchQ = searchParts.filter(Boolean).join(" ").trim();
-
-    const r = await fetch(`/api/ebay-sold?q=${encodeURIComponent(searchQ)}`);
-    if (r.ok) {
-      const data = await r.json();
-      // Filtro de relevancia: el título debe contener el apellido del jugador
-      const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
-      const relevant = (data.results||[]).filter(it =>
-        it.priceEur && isPriceOk(it.priceEur, card) &&
-        (lastName.length < 3 || (it.title||"").toLowerCase().includes(lastName))
-      );
-      const prices = relevant.map(it => it.priceEur).sort((a,b)=>a-b);
-      if (prices.length >= 2) {
-        const median = prices[Math.floor(prices.length/2)];
-        const latest = relevant.find(it => it.endTime);
-        const lastSoldDays = latest?.endTime
-          ? Math.round((Date.now()-new Date(latest.endTime).getTime())/86400000)
-          : null;
-        return save({priceEur:median, priceMin:prices[0], pricePrem:prices[prices.length-1],
-          priceSource:`eBay sold · ${prices.length} ventas`,
-          soldCount:prices.length, lastSoldDays, changeWeek:0, changeMonth:0});
-      }
-    }
-  } catch {}
-
-  // ── PASO 3: Sonnet con contexto completo de la carta ──
-  try {
-    const cardCtx = serial
-      ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo).`
-      : `Sin gradear (RAW). No PSA/BGS/CGC.`;
+    const serialCtx = serial
+      ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo — rarísima).`
+      : `Carta sin gradear (RAW). No PSA/BGS/CGC.`;
     const raw = await callAI([{role:"user",content:
-`Busca en eBay ventas CERRADAS de esta carta específica.
-Carta: ${desc} — ${cardCtx}
-Excluye PSA/BGS/CGC gradeadas. Solo cartas raw. Calcula mediana. USD×0.92=EUR.
-Solo JSON: {"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"eBay sold (N ventas)"}
-Sin ventas recientes: {"priceEur":null}`
-    }], true, 300, "claude-sonnet-4-6");
+`Eres experto en cartas de fútbol coleccionables. Precio de mercado en EUR de esta carta sin gradear.
+
+Carta: ${desc}
+${serialCtx}
+
+Responde SOLO con JSON:
+{"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"Estimación mercado"}`
+    }], false, 200, "claude-sonnet-4-6");
     const p = jparse(raw);
     if (p && isPriceOk(num(p.priceEur), card)) {
-      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65),
+      return save({
+        priceEur:num(p.priceEur),
+        priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65),
         pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5),
-        priceSource:p.priceSource||"eBay sold", changeWeek:0, changeMonth:0});
+        priceSource:"Estimación mercado", changeWeek:0, changeMonth:0
+      });
     }
   } catch {}
 
-  // ── PASO 4: eBay activo filtrado ──
-  try {
-    const hints = [card.player, card.manufacturer||card.collection, /auto/i.test(card.rarity||"")?"auto":"", serial||""].filter(Boolean).join(" ");
-    const r = await fetch(`/api/ebay?q=${encodeURIComponent(hints)}`);
-    if (r.ok) {
-      const data = await r.json();
-      const prices = (data.results||[])
-        .filter(it => it.price && !EBAY_BAD.test(it.title||"") && !GRADED_PAT.test(it.title||""))
-        .map(it => parseEbayPrice(it.price)).filter(p => p && isPriceOk(p, card)).sort((a,b)=>a-b);
-      if (prices.length > 0) {
-        const median = prices[Math.floor(prices.length/2)];
-        return save({priceEur:median, priceMin:Math.round(median*.65), pricePrem:Math.round(median*1.5), priceSource:"eBay activo", changeWeek:0, changeMonth:0});
-      }
-    }
-  } catch {}
-
-  // ── PASO 5: estimación por rareza ──
+  // ── PASO 3: estimación por rareza (último recurso estable) ──
   return save({...rarityEstimate(card), changeWeek:0, changeMonth:0, isEstimate:true});
 }
 
@@ -2322,22 +2274,60 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);setBackDone(false);setBackScanning(false);if(fileRef.current)fileRef.current.value="";if(backRef.current)backRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
-    if(gate && !gate("scan")) return;            // límite invitado (5) → registro
-    // Check freemium limit
+    if(gate && !gate("scan")) return;
     if(!canScan(userId, isPremium)) { onPaywall&&onPaywall(); return; }
-    // Compress image first
     const compressed = await compressImage(file);
     const d = compressed || await toDataURL(file);
-    setDurl(d);setPh("scanning");setAdded(false);
+    setDurl(d);setPh("scanning");setAdded(false);setBackDone(false);
     try{
       const b64=d.split(",")[1];
-      const c=await scanCard(b64,"image/jpeg");setCard(c);setPh("pricing");
-      incrementScan(userId); // count usage
+      const c=await scanCard(b64,"image/jpeg");
+      setCard(c);
+      incrementScan(userId);
       tally && tally("scan");
-      let p=null;try{p=await fetchPrice(c);}catch{}
-      setPrice(p);setPh("result");
+      setPh("back_prompt"); // Siempre pedir el reverso antes de buscar precio
     }catch(e){setErr(e.message==="NO_CARD"?(isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card."):(isES?"No pude identificarla. Prueba con más luz.":"Couldn't identify it. Try better lighting."));setPh("error");}
   },[lang,gate,tally]);
+
+  // Procesa el reverso y luego busca el precio
+  const processBack=useCallback(async file=>{
+    if(!file||!file.type.startsWith("image/")||!card) return;
+    setPh("back_scanning");
+    try{
+      const compressed = await compressImage(file);
+      const d = compressed || await toDataURL(file);
+      const backData = await scanCardBack(d.split(",")[1],"image/jpeg",card);
+      let finalCard = card;
+      if(backData && (backData.serialNumber || backData.hasAuto)){
+        finalCard = {
+          ...card,
+          serialNumber: backData.serialNumber || card.serialNumber || null,
+          rarity: backData.rarity || (backData.serialNumber
+            ? (backData.hasAuto ? `Auto Numbered ${backData.serialNumber}` : `Numbered ${backData.serialNumber}`)
+            : card.rarity),
+        };
+        setCard(finalCard);
+      }
+      setBackDone(true);
+      setPh("pricing");
+      let p=null;try{p=await fetchPrice(finalCard);}catch{}
+      setPrice(p);setPh("result");
+    }catch(e){
+      console.error("back scan error",e);
+      // Si falla el reverso, seguimos con los datos del frente
+      setPh("pricing");
+      let p=null;try{p=await fetchPrice(card);}catch{}
+      setPrice(p);setPh("result");
+    }
+  },[card]);
+
+  const skipBack=useCallback(async ()=>{
+    // Sin numeración en el reverso — busca precio solo con datos del frente
+    setBackDone(true);
+    setPh("pricing");
+    let p=null;try{p=await fetchPrice(card);}catch{}
+    setPrice(p);setPh("result");
+  },[card]);
 
   if(ph==="idle")return(
     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28,gap:16,background:C.bg2}}>
@@ -2382,13 +2372,70 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
     </div>
   );
 
-  if(ph==="scanning"||ph==="pricing")return(
+  if(ph==="scanning"||ph==="pricing"||ph==="back_scanning")return(
     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,gap:20,background:C.bg}}>
       {durl&&<div style={{width:160,height:224,borderRadius:14,overflow:"hidden",border:`3px solid ${C.accent}`,boxShadow:`0 0 24px ${C.accent}44`}}>
         <img src={durl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
       </div>}
       <Spinner/>
-      <div style={{fontSize:13,color:C.sub,textAlign:"center"}}>{ph==="scanning"?(isES?"Analizando carta con IA…":"Analyzing with AI…"):(isES?"Buscando precio real…":"Searching real price…")}</div>
+      <div style={{fontSize:13,color:C.sub,textAlign:"center"}}>
+        {ph==="scanning"?(isES?"Analizando cara delantera…":"Analyzing front…"):
+         ph==="back_scanning"?(isES?"Analizando reverso…":"Analyzing back…"):
+         (isES?"Buscando precio real…":"Searching real price…")}
+      </div>
+    </div>
+  );
+
+  // Pantalla intermedia: cara delantera identificada → pedir reverso (OBLIGATORIO)
+  if(ph==="back_prompt"&&card)return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",background:C.bg}}>
+      <input ref={backRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+        onChange={e=>{ const f=e.target.files?.[0]; if(f) processBack(f); if(backRef.current) backRef.current.value=""; }}/>
+      {/* Confirmación del frente */}
+      <div style={{background:C.bg2,padding:"16px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{width:56,height:78,borderRadius:8,overflow:"hidden",border:`2px solid ${C.accent}`,flexShrink:0}}>
+          <img src={durl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+        </div>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+            <span style={{fontSize:18}}>✅</span>
+            <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{isES?"Cara delantera identificada":"Front identified"}</span>
+          </div>
+          <div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{card.player}</div>
+          <div style={{fontSize:12,color:C.sub}}>{card.manufacturer}{card.collection?` · ${card.collection}`:""}</div>
+        </div>
+      </div>
+      {/* Instrucción reverso */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"28px 24px",gap:16,textAlign:"center"}}>
+        <div style={{fontSize:56}}>🔄</div>
+        <div style={{fontFamily:FD,fontSize:22,fontWeight:800,color:C.text,lineHeight:1.2}}>
+          {isES?"Ahora escanea el reverso":"Now scan the back"}
+        </div>
+        <div style={{fontSize:13,color:C.sub,lineHeight:1.6,maxWidth:300}}>
+          {isES
+            ? "Da la vuelta a la carta y fotografía el reverso. Así detectamos la numeración, autógrafo y número de colección para darte el precio más preciso."
+            : "Flip the card and photograph the back. This detects the serial number, autograph and card number for the most accurate price."}
+        </div>
+        <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",width:"100%",maxWidth:320}}>
+          <div style={{fontSize:11,color:C.sub,fontWeight:600,textAlign:"left"}}>
+            {isES?"¿Qué buscamos en el reverso?":"What are we looking for on the back?"}
+          </div>
+          <div style={{fontSize:12,color:C.text,marginTop:6,lineHeight:1.8,textAlign:"left"}}>
+            🔢 Número de tirada (ej. 14/25, /99)<br/>
+            ✍️ Autógrafo o firma<br/>
+            🏷️ Número de carta del set
+          </div>
+        </div>
+      </div>
+      {/* Botones */}
+      <div style={{padding:"16px 20px 32px",display:"flex",flexDirection:"column",gap:10}}>
+        <button onClick={()=>backRef.current?.click()} style={{width:"100%",padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
+          📷 {isES?"Escanear reverso":"Scan back"}
+        </button>
+        <button onClick={skipBack} style={{width:"100%",padding:"12px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
+          {isES?"No tiene numeración ni auto en el reverso":"No serial number or auto on back"}
+        </button>
+      </div>
     </div>
   );
 
@@ -2404,45 +2451,8 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   if(ph==="result"&&card){
     const p=num(price?.priceEur);
     const doAdd=()=>{if(added)return;onAdd({...card,...(price||{}),priceEur:p??null,price:p??null,scanned:true,_thumb:durl,_uid:`scan_${Date.now()}`});setAdded(true);};
-
-    // Procesa el reverso de la carta
-    const handleBack = async file => {
-      if(!file||!file.type.startsWith("image/")) return;
-      setBackScanning(true);
-      try {
-        const compressed = await compressImage(file);
-        const d = compressed || await toDataURL(file);
-        const backData = await scanCardBack(d.split(",")[1], "image/jpeg", card);
-        if(backData) {
-          const updatedCard = {
-            ...card,
-            serialNumber: backData.serialNumber || card.serialNumber || null,
-            rarity: backData.rarity || (backData.serialNumber
-              ? (backData.hasAuto ? `Auto Numbered ${backData.serialNumber}` : `Numbered ${backData.serialNumber}`)
-              : card.rarity),
-          };
-          setCard(updatedCard);
-          setBackDone(true);
-          // Re-buscar precio con los nuevos datos del reverso
-          setPh("pricing");
-          let newPrice=null;
-          try{
-            const cacheKey=`${updatedCard.player}|${updatedCard.manufacturer||""}|${updatedCard.collection||""}|${updatedCard.rarity||"Base"}|${updatedCard.serialNumber||""}|${updatedCard.season||""}`;
-            delete priceCache[cacheKey]; // forzar precio fresco con nueva info
-            newPrice=await fetchPrice(updatedCard);
-          }catch{}
-          setPrice(newPrice);
-          setPh("result");
-        }
-      } catch(e){ console.error("back scan error",e); }
-      setBackScanning(false);
-    };
-
     return(
       <div style={{flex:1,overflowY:"auto",background:C.bg,color:C.text}}>
-        {/* Input oculto para el reverso */}
-        <input ref={backRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
-          onChange={e=>{ const f=e.target.files?.[0]; if(f) handleBack(f); }}/>
         <div style={{background:C.bg2,padding:"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
           <CardViz card={card} photo={durl} sz="xl"/>
           <div style={{textAlign:"center"}}>
@@ -2490,16 +2500,6 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
           <button onClick={doAdd} disabled={added} style={{width:"100%",padding:"15px",background:added?C.accentL:C.accent,border:added?`1.5px solid ${C.accent}`:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:added?C.accent:"#fff",cursor:added?"default":"pointer",transition:"all .2s",marginBottom:10,boxShadow:added?"none":`0 4px 14px ${C.accent}44`}}>
             {added?(isES?"✓ En tu colección":"✓ In collection"):(isES?"+ Añadir a mi colección":"+ Add to my collection")}
           </button>
-
-          {/* Botón reverso — detecta numeración/auto en la parte de atrás */}
-          {!backDone&&(
-            <button
-              onClick={()=>backRef.current?.click()}
-              disabled={backScanning}
-              style={{width:"100%",padding:"13px",background:backScanning?"transparent":C.bg3,border:`1.5px solid ${backScanning?C.border:"#7c3aed88"}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:700,color:backScanning?C.sub:"#a78bfa",cursor:backScanning?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}>
-              {backScanning?(isES?"🔍 Analizando reverso…":"🔍 Scanning back…"):(isES?"🔄 Escanear reverso (numeración/auto)":"🔄 Scan back (serial/auto)")}
-            </button>
-          )}
 
           <button onClick={reset} style={{width:"100%",padding:"13px",background:"transparent",border:`1.5px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:700,color:C.sub,cursor:"pointer"}}>
             {isES?"Escanear otra carta":"Scan another card"}
@@ -2795,28 +2795,59 @@ export default function CardGoal() {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
+      // "Actualizar" siempre pide precios frescos — borra caché de todas las cartas
+      col.forEach(c => {
+        const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
+        lsPriceClear(key);
+        delete priceCache[key];
+      });
+
+      // Una sola llamada a Sonnet con todas las cartas
+      const cardList = col.map((c, n) => {
+        const serial = c.serialNumber && String(c.serialNumber)!=="null" ? ` NUMERADA ${c.serialNumber}` : "";
+        return `${n+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"}${serial} | ${c.season||"?"}`;
+      }).join("\n");
+
+      const raw = await callAI([{role:"user", content:
+`Experto tasador de cartas de fútbol coleccionables. Valora estas ${col.length} cartas en EUR (SIN GRADEAR, raw, no PSA/BGS):
+
+${cardList}
+
+RANGOS DE REFERENCIA:
+- Cromo base jugador común: 0.5-3€ | jugador conocido: 2-8€ | jugador top (Messi/CR7/Mbappé/Yamal/Vinicius): 5-25€
+- Prizm/Refractor/Foil: 4-15€ | jugador top: 15-60€
+- Rookie prometedor: 10-60€ | Rookie top: 30-200€
+- Auto sin numerar: 15-100€ | jugador top: 80-500€
+- Auto /99: 25-150€ | Auto /25: 80-500€ | Auto /10: 200-1000€ | Auto /5: 500-3000€
+- Numerada sin auto: aprox. 30% del precio del auto equivalente
+- Vintage/clásico (antes del 2010): puede valer 2-5x más según el jugador
+
+Devuelve SOLO un JSON array con exactamente ${col.length} objetos en el mismo orden:
+[{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
+      }], false, 1000, "claude-sonnet-4-6");
+
       const updated = [...col];
-      // Procesamos de 3 en 3 para no saturar la API
-      // fetchPrice → eBay ventas cerradas (mediana real) → Sonnet → rareza
-      for(let i = 0; i < col.length; i += 3) {
-        const batch = col.slice(i, i+3);
-        const prices = await Promise.all(batch.map(c => {
-          // Borrar caché in-memory para obtener precio fresco
-          const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
-          delete priceCache[key];
-          return fetchPrice(c).catch(()=>null);
-        }));
-        prices.forEach((p, j) => {
-          if(!p || !p.priceEur) return;
-          updated[i+j] = {...updated[i+j],
-            priceEur:p.priceEur, priceMin:p.priceMin,
-            pricePrem:p.pricePrem, priceSource:p.priceSource,
-            soldCount:p.soldCount, lastSoldDays:p.lastSoldDays
+      const clean = raw.replace(/```json|```/g,"").trim();
+      const match = clean.match(/\[[\s\S]*\]/);
+      if(match) {
+        const prices = JSON.parse(match[0]);
+        col.forEach((card, i) => {
+          const p = prices[i];
+          const newPrice = num(p?.priceEur);
+          if(!newPrice || newPrice <= 0 || !isPriceOk(newPrice, card)) return;
+          const result = {
+            priceEur: newPrice,
+            priceMin: num(p.priceMin) || Math.round(newPrice * 0.65),
+            pricePrem: num(p.pricePrem) || Math.round(newPrice * 1.5),
+            priceSource: "Estimación mercado"
           };
+          updated[i] = {...updated[i], ...result};
+          const key = `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.serialNumber||""}|${card.season||""}`;
+          lsPriceSet(key, result);
         });
       }
       setCol(updated);
-    } catch(e) { console.error("handleUpdatePrices error:", e); }
+    } catch(e) { console.error("handleUpdatePrices:", e); }
     setUpdatingPrices(false);
   },[col, updatingPrices]);
 
