@@ -667,68 +667,86 @@ async function fetchPrice(card) {
     ? card._ebayTitle
     : `${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"}${serialLabel} | ${card.season||"?"}`;
   const cacheKey = card._ebayTitle ? `ebay:${desc}` : `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${serial||""}|${card.season||""}`;
+
+  // ── Caché (memoria + localStorage 23h) → INSTANTÁNEO ──
   if (priceCache[cacheKey]) return priceCache[cacheKey];
   const lsCached = lsPriceGet(cacheKey);
   if (lsCached) { priceCache[cacheKey]=lsCached; return lsCached; }
 
-  // ── PASO 1: precio ya en el objeto (viene de búsqueda eBay) → INSTANTÁNEO ──
-  if (card._fromEbay && num(card.priceEur) != null && num(card.priceEur) > 0) {
-    const p = num(card.priceEur);
-    const result = { priceEur:p, priceMin:Math.round(p*0.65), pricePrem:Math.round(p*1.5), priceSource:"eBay (anuncio activo)", changeWeek:0, changeMonth:0 };
+  const save = (result) => {
     priceCache[cacheKey] = result;
-    logPriceSnapshot(card, result.priceEur, result.priceSource);
+    lsPriceSet(cacheKey, result);
     return result;
+  };
+
+  // ── PASO 1: precio ya en el objeto (viene de búsqueda eBay) → INSTANTÁNEO ──
+  if (card._fromEbay && num(card.priceEur) > 0) {
+    const p = num(card.priceEur);
+    return save({ priceEur:p, priceMin:Math.round(p*0.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0 });
   }
 
-  // ── PASO 2: eBay API con query inteligente (incluye auto/numerada/refractor) → ~1-2s ──
+  // ── PASO 2: Haiku + búsqueda web → ventas CERRADAS reales → ~3-5s ──
+  // Más lento que eBay directo pero mucho más preciso (precios reales vendidos, no anuncios)
+  const serialNote = serial
+    ? `IMPORTANTE: carta NUMERADA ${serial} — solo existen ${serial.replace("/","")} copias en el mundo. Vale 10-100x más que la versión base. Busca específicamente ventas de esta numeración.`
+    : "Carta sin numerar. SOLO precios de cartas SIN GRADEAR (raw) — excluye PSA, BGS, CGC.";
+  try {
+    const raw = await callAI([{role:"user",content:
+`Precio de mercado en EUR de esta carta de fútbol. Solo JSON.
+Carta: ${desc}
+${serialNote}
+
+Busca en eBay ventas CERRADAS (sold/completed listings) últimos 90 días.
+Para cromos españoles busca también en Todocoleccion.net vendidos.
+Calcula la MEDIANA. Convierte USD×0.92, GBP×1.17 a EUR.
+
+{"priceEur":25,"priceMin":15,"pricePrem":50,"priceSource":"eBay sold (N ventas)"}
+Si no hay ventas recientes: {"priceEur":null}`
+    }], true, 350);
+    const p = jparse(raw);
+    if (p && num(p.priceEur) > 0) {
+      const result = save({ priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*0.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:p.priceSource||"eBay sold", changeWeek:0, changeMonth:0 });
+      logPriceSnapshot(card, result.priceEur, result.priceSource);
+      return result;
+    }
+  } catch {}
+
+  // ── PASO 3: eBay API activa (si búsqueda web falla) → ~1-2s ──
   try {
     const rarityHints = [];
-    if (/auto/i.test(card.rarity||""))                          rarityHints.push("auto");
-    if (serial)                                                 rarityHints.push(serial);
-    if (/refractor|prizm|holo|silver|gold/i.test(card.rarity||"")) rarityHints.push("refractor");
-    if (/rookie|\brc\b/i.test(card.rarity||""))                 rarityHints.push("rookie");
+    if (/auto/i.test(card.rarity||"")) rarityHints.push("auto");
+    if (serial) rarityHints.push(serial);
     const priceQuery = [card.player, card.manufacturer||card.collection, ...rarityHints].filter(Boolean).join(" ");
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(priceQuery)}`);
     if (r.ok) {
       const data = await r.json();
       const prices = (data.results||[])
         .filter(it => it.price && !EBAY_BAD.test(it.title||"") && !GRADED_PAT.test(it.title||""))
-        .map(it => parseEbayPrice(it.price))
-        .filter(p => p && p > 0)
-        .sort((a,b) => a-b);
+        .map(it => parseEbayPrice(it.price)).filter(p => p && p > 0).sort((a,b)=>a-b);
       if (prices.length > 0) {
         const median = prices[Math.floor(prices.length/2)];
-        const result = { priceEur:median, priceMin:Math.round(median*0.65), pricePrem:Math.round(median*1.5), priceSource:"eBay (precio de mercado)", changeWeek:0, changeMonth:0 };
-        priceCache[cacheKey] = result;
-        lsPriceSet(cacheKey, result);
-        logPriceSnapshot(card, median, "eBay");
+        const result = save({ priceEur:median, priceMin:Math.round(median*0.65), pricePrem:Math.round(median*1.5), priceSource:"eBay (anuncio activo)", changeWeek:0, changeMonth:0 });
+        logPriceSnapshot(card, median, "eBay activo");
         return result;
       }
     }
   } catch {}
 
-  // ── PASO 3: estimación Haiku sin búsqueda web → ~2-3s (fallback) ──
-  // Solo cuando eBay no tiene resultados. Sin web search = precio orientativo.
-  const cardType = [
-    card.rarity||"Base",
-    serial ? `Serial ${serial} (${serial.replace("/","")} copias en el mundo)` : "Sin numerar",
-    "Sin gradear (RAW) — NO usar precios PSA/BGS"
-  ].join(", ");
-  const estRaw = await callAI([{role:"user",content:
-`Football card price estimate in EUR. Reply ONLY with JSON.
-Card: ${desc}
-Type: ${cardType}
-Give realistic EUR price for this UNGRADED card. If truly unknown, use null.
-Important: Auto cards /99 = ~50-300€, Auto /25 = ~150-800€, Auto /10 = ~300-2000€, Base Prizm = ~5-30€, Base standard = ~1-10€.
-{"priceEur":25,"priceMin":15,"pricePrem":60,"priceSource":"Estimación IA CardGoal","isEstimate":true}`
-  }], false, 250);
-  const est = jparse(estRaw);
-  if (est && est.priceEur && num(est.priceEur) > 0) {
-    const res = { priceEur:num(est.priceEur), priceMin:num(est.priceMin)||Math.round(num(est.priceEur)*0.6), pricePrem:num(est.pricePrem)||Math.round(num(est.priceEur)*1.8), priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0, isEstimate:true };
-    priceCache[cacheKey] = res;
-    lsPriceSet(cacheKey, res);
-    return res;
-  }
+  // ── PASO 4: estimación Haiku sin web (último recurso) → ~2s ──
+  try {
+    const estRaw = await callAI([{role:"user",content:
+`Precio mercado EUR carta fútbol sin gradear (RAW). Solo JSON.
+Carta: ${desc}
+${serial ? `Serial ${serial}: solo ${serial.replace("/","")} copias, rarísima.` : ""}
+Rangos orientativos: Auto /1=500-5000€ /5=200-2000€ /10=100-800€ /25=80-400€ /99=30-200€ | Prizm base=5-30€ | Base estándar=1-10€ | Rookie premium=10-80€
+{"priceEur":20,"priceMin":12,"pricePrem":45,"priceSource":"Estimación IA","isEstimate":true}`
+    }], false, 200);
+    const est = jparse(estRaw);
+    if (est && num(est.priceEur) > 0) {
+      return save({ priceEur:num(est.priceEur), priceMin:num(est.priceMin)||Math.round(num(est.priceEur)*0.6), pricePrem:num(est.pricePrem)||Math.round(num(est.priceEur)*1.8), priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0, isEstimate:true });
+    }
+  } catch {}
+
   return null;
 }
 
