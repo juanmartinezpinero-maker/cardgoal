@@ -716,42 +716,54 @@ async function fetchPrice(card) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: eBay ventas CERRADAS (precios reales de lo que se ha vendido) → ~1-2s ──
+  // ── PASO 2: eBay ventas CERRADAS con query específica + filtro de relevancia ──
   try {
     const isAuto  = /auto/i.test(card.rarity||"");
-    const searchQ = [card.player, card.manufacturer||"", isAuto?"auto":"", serial||""]
-                      .filter(Boolean).join(" ").trim();
+    // Query específica con todos los datos disponibles (evita mezclar cartas distintas)
+    const searchParts = [
+      card.player,
+      card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
+      card.collection  && card.collection !=="?" ? card.collection  : "",
+      card.season      && card.season      !=="?" ? card.season      : "",
+      isAuto ? "auto" : "",
+      serial || ""
+    ];
+    const searchQ = searchParts.filter(Boolean).join(" ").trim();
+
     const r = await fetch(`/api/ebay-sold?q=${encodeURIComponent(searchQ)}`);
     if (r.ok) {
-      const data   = await r.json();
-      const prices = (data.results||[])
-        .map(it => it.priceEur).filter(p => p && isPriceOk(p, card)).sort((a,b)=>a-b);
+      const data = await r.json();
+      // Filtro de relevancia: el título debe contener el apellido del jugador
+      const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
+      const relevant = (data.results||[]).filter(it =>
+        it.priceEur && isPriceOk(it.priceEur, card) &&
+        (lastName.length < 3 || (it.title||"").toLowerCase().includes(lastName))
+      );
+      const prices = relevant.map(it => it.priceEur).sort((a,b)=>a-b);
       if (prices.length >= 2) {
         const median = prices[Math.floor(prices.length/2)];
-        const latest = (data.results||[]).find(it => it.endTime && isPriceOk(it.priceEur,card));
+        const latest = relevant.find(it => it.endTime);
         const lastSoldDays = latest?.endTime
           ? Math.round((Date.now()-new Date(latest.endTime).getTime())/86400000)
           : null;
         return save({priceEur:median, priceMin:prices[0], pricePrem:prices[prices.length-1],
-          priceSource:`eBay sold · ${prices.length} ventas reales`,
+          priceSource:`eBay sold · ${prices.length} ventas`,
           soldCount:prices.length, lastSoldDays, changeWeek:0, changeMonth:0});
       }
     }
   } catch {}
 
-  // ── PASO 3: Sonnet + búsqueda web (si eBay no tiene suficientes ventas) → ~4-6s ──
+  // ── PASO 3: Sonnet con contexto completo de la carta ──
   try {
-    const isAuto  = /auto/i.test(card.rarity||"");
     const cardCtx = serial
       ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo).`
       : `Sin gradear (RAW). No PSA/BGS/CGC.`;
-    const searchQ = [card.player, card.manufacturer, isAuto?"auto":"", serial||""].filter(Boolean).join(" ");
     const raw = await callAI([{role:"user",content:
-`Busca en eBay ventas CERRADAS de: "${searchQ}"
+`Busca en eBay ventas CERRADAS de esta carta específica.
 Carta: ${desc} — ${cardCtx}
-Excluye PSA/BGS/CGC gradeadas. Calcula mediana. USD×0.92=EUR.
+Excluye PSA/BGS/CGC gradeadas. Solo cartas raw. Calcula mediana. USD×0.92=EUR.
 Solo JSON: {"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"eBay sold (N ventas)"}
-Sin ventas: {"priceEur":null}`
+Sin ventas recientes: {"priceEur":null}`
     }], true, 300, "claude-sonnet-4-6");
     const p = jparse(raw);
     if (p && isPriceOk(num(p.priceEur), card)) {
@@ -879,6 +891,22 @@ Only include SVG elements. No JavaScript. Use gradients, paths, text, rect, elli
 }
 
 /* ─── SCAN ────────────────────────────────────────────────── */
+// Escanea el REVERSO de una carta para detectar numeración, auto, número de carta
+async function scanCardBack(b64, mime, frontCard) {
+  const raw = await callAI([{role:"user",content:[
+    {type:"image",source:{type:"base64",media_type:mime,data:b64}},
+    {type:"text",text:`This is the BACK of a trading card. Front identified as: ${frontCard.player||"?"} ${frontCard.manufacturer||""} ${frontCard.collection||""}.
+Look carefully for:
+1. Serial/print run number stamped in foil or ink (e.g. "14/25", "005/099", "/10") — check corners and bottom edge
+2. Card catalog number (e.g. "#157", "CL-14")
+3. Autograph/signature presence (ink signature or sticker)
+Return ONLY valid JSON:
+{"serialNumber":"14/25","catalogNumber":"157","hasAuto":true,"rarity":"Auto Numbered /25"}
+If nothing special found: {"serialNumber":null,"catalogNumber":null,"hasAuto":false}`}
+  ]}]);
+  return jparse(raw);
+}
+
 const SCAN_P = [
 `Expert football card identifier. IMPORTANT: look carefully for any serial/print-run number stamped on the card (e.g. "5/5", "24/99", "1/10" — usually bottom corner, often gold-foil stamped). This is CRITICAL for valuation.
 Return ONLY valid JSON:
@@ -2286,9 +2314,12 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   const [price,setPrice]=useState(null);
   const [err,setErr]=useState("");
   const [added,setAdded]=useState(false);
+  const [backScanning,setBackScanning]=useState(false);
+  const [backDone,setBackDone]=useState(false);
   const fileRef=useRef();
+  const backRef=useRef();
   const isES=lang==="es";
-  const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);if(fileRef.current)fileRef.current.value="";};
+  const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);setBackDone(false);setBackScanning(false);if(fileRef.current)fileRef.current.value="";if(backRef.current)backRef.current.value="";};
   const process=useCallback(async file=>{
     if(!file||!file.type.startsWith("image/"))return;
     if(gate && !gate("scan")) return;            // límite invitado (5) → registro
@@ -2373,8 +2404,45 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   if(ph==="result"&&card){
     const p=num(price?.priceEur);
     const doAdd=()=>{if(added)return;onAdd({...card,...(price||{}),priceEur:p??null,price:p??null,scanned:true,_thumb:durl,_uid:`scan_${Date.now()}`});setAdded(true);};
+
+    // Procesa el reverso de la carta
+    const handleBack = async file => {
+      if(!file||!file.type.startsWith("image/")) return;
+      setBackScanning(true);
+      try {
+        const compressed = await compressImage(file);
+        const d = compressed || await toDataURL(file);
+        const backData = await scanCardBack(d.split(",")[1], "image/jpeg", card);
+        if(backData) {
+          const updatedCard = {
+            ...card,
+            serialNumber: backData.serialNumber || card.serialNumber || null,
+            rarity: backData.rarity || (backData.serialNumber
+              ? (backData.hasAuto ? `Auto Numbered ${backData.serialNumber}` : `Numbered ${backData.serialNumber}`)
+              : card.rarity),
+          };
+          setCard(updatedCard);
+          setBackDone(true);
+          // Re-buscar precio con los nuevos datos del reverso
+          setPh("pricing");
+          let newPrice=null;
+          try{
+            const cacheKey=`${updatedCard.player}|${updatedCard.manufacturer||""}|${updatedCard.collection||""}|${updatedCard.rarity||"Base"}|${updatedCard.serialNumber||""}|${updatedCard.season||""}`;
+            delete priceCache[cacheKey]; // forzar precio fresco con nueva info
+            newPrice=await fetchPrice(updatedCard);
+          }catch{}
+          setPrice(newPrice);
+          setPh("result");
+        }
+      } catch(e){ console.error("back scan error",e); }
+      setBackScanning(false);
+    };
+
     return(
       <div style={{flex:1,overflowY:"auto",background:C.bg,color:C.text}}>
+        {/* Input oculto para el reverso */}
+        <input ref={backRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+          onChange={e=>{ const f=e.target.files?.[0]; if(f) handleBack(f); }}/>
         <div style={{background:C.bg2,padding:"20px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
           <CardViz card={card} photo={durl} sz="xl"/>
           <div style={{textAlign:"center"}}>
@@ -2384,6 +2452,8 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
           <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
             {card.manufacturer&&<span style={{padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:600,background:C.bg,color:C.sub,border:`1px solid ${C.border}`}}>{card.manufacturer}</span>}
             {card.rarity&&card.rarity!=="Base"&&<span style={{padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:600,background:C.goldL,color:C.gold,border:`1px solid ${C.gold}44`}}>★ {card.rarity}</span>}
+            {card.serialNumber&&card.serialNumber!=="null"&&<span style={{padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,background:"#7c3aed22",color:"#a78bfa",border:"1px solid #7c3aed44"}}>🔢 {card.serialNumber}</span>}
+            {backDone&&<span style={{padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:600,background:C.accentL,color:C.accent,border:`1px solid ${C.accent}44`}}>✓ Reverso escaneado</span>}
           </div>
           <span style={{padding:"3px 10px",borderRadius:8,fontSize:10,fontWeight:600,background:C.accentL,color:C.accent,border:`1px solid ${C.accent}44`}}>🤖 IA · {Math.round((num(card.confidence)||0.7)*100)}%</span>
         </div>
@@ -2420,6 +2490,17 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
           <button onClick={doAdd} disabled={added} style={{width:"100%",padding:"15px",background:added?C.accentL:C.accent,border:added?`1.5px solid ${C.accent}`:"none",borderRadius:14,fontFamily:FD,fontSize:15,fontWeight:800,color:added?C.accent:"#fff",cursor:added?"default":"pointer",transition:"all .2s",marginBottom:10,boxShadow:added?"none":`0 4px 14px ${C.accent}44`}}>
             {added?(isES?"✓ En tu colección":"✓ In collection"):(isES?"+ Añadir a mi colección":"+ Add to my collection")}
           </button>
+
+          {/* Botón reverso — detecta numeración/auto en la parte de atrás */}
+          {!backDone&&(
+            <button
+              onClick={()=>backRef.current?.click()}
+              disabled={backScanning}
+              style={{width:"100%",padding:"13px",background:backScanning?"transparent":C.bg3,border:`1.5px solid ${backScanning?C.border:"#7c3aed88"}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:700,color:backScanning?C.sub:"#a78bfa",cursor:backScanning?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}>
+              {backScanning?(isES?"🔍 Analizando reverso…":"🔍 Scanning back…"):(isES?"🔄 Escanear reverso (numeración/auto)":"🔄 Scan back (serial/auto)")}
+            </button>
+          )}
+
           <button onClick={reset} style={{width:"100%",padding:"13px",background:"transparent",border:`1.5px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:700,color:C.sub,cursor:"pointer"}}>
             {isES?"Escanear otra carta":"Scan another card"}
           </button>
