@@ -712,34 +712,41 @@ async function fetchPrice(card) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: Sonnet sin búsqueda web → conoce los precios de cartas por entrenamiento ──
-  // Mismo enfoque que ChatGPT: el modelo sabe cuánto valen las cartas, sin necesidad de buscar
+  // ── PASO 2: Sonnet + búsqueda web → ventas cerradas reales en eBay ──
+  // Búsqueda real de lo que se ha vendido, como cuando tú pasas la carta a ChatGPT
   try {
-    const serialCtx = serial
-      ? `Es una carta NUMERADA ${serial} (solo existen ${serial.replace("/","")} copias en el mundo). Esto la hace muy rara y valiosa.`
-      : `Es una carta sin numerar, sin gradear (RAW — no PSA/BGS/CGC).`;
+    const isAuto   = /auto/i.test(card.rarity||"");
+    const isPrizm  = /prizm|refract|holo|silver|gold/i.test(card.rarity||"");
+    const isRookie = /rookie|\brc\b/i.test(card.rarity||"");
+    const cardCtx  = serial
+      ? `CARTA NUMERADA ${serial} — existen solo ${serial.replace("/","")} copias. Es rarísima y vale mucho más que la versión base.`
+      : `Carta ${isAuto?"AUTO ":""}${isPrizm?"PRIZM/REFRACTOR ":""}${isRookie?"ROOKIE ":""}sin gradear (RAW). No es PSA/BGS/CGC.`;
+
+    const searchQ = [card.player, card.manufacturer, serial||"", isAuto?"auto":""].filter(Boolean).join(" ");
+
     const raw = await callAI([{role:"user", content:
-`Eres experto en el mercado de cromos y cartas de fútbol coleccionables. Dime el precio actual de mercado en EUR de esta carta.
+`Busca en eBay el precio real de esta carta de fútbol.
 
 Carta: ${desc}
-${serialCtx}
+${cardCtx}
 
-Basa tu respuesta en tu conocimiento del mercado de cartas de fútbol (eBay, Cardmarket, Todocoleccion). 
-Ten en cuenta: edición, jugador, rareza, si es auto/numerada/rookie/refractor.
-Precio para carta SIN GRADEAR (raw). NO des precios de cartas gradeadas PSA/BGS.
+Haz una búsqueda de ventas CERRADAS (sold/completed) en eBay para: "${searchQ}"
+IMPORTANTE: excluye listados que mencionan PSA, BGS, CGC, graded o slab — quiero precio de carta RAW.
+Convierte USD a EUR (×0.92), GBP a EUR (×1.17).
+Calcula la mediana de las últimas ventas encontradas (últimos 6 meses).
 
-Responde SOLO con este JSON (sin explicación):
-{"priceEur": 25, "priceMin": 15, "pricePrem": 50, "priceSource": "Estimación mercado"}
-`
-    }], false, 300, "claude-sonnet-4-6");
+Responde SOLO con JSON:
+{"priceEur":X,"priceMin":Y,"pricePrem":Z,"priceSource":"eBay sold (N ventas)"}
+Si no hay ventas de esta carta específica: {"priceEur":null}`
+    }], true, 350, "claude-sonnet-4-6");
 
     const p = jparse(raw);
     if (p && isPriceOk(num(p.priceEur), card)) {
-      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:p.priceSource||"Estimación mercado", changeWeek:0, changeMonth:0});
+      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:p.priceSource||"eBay sold", changeWeek:0, changeMonth:0});
     }
   } catch {}
 
-  // ── PASO 3: eBay API activa filtrada (si Sonnet no tiene datos) ──
+  // ── PASO 3: eBay API activa filtrada ──
   try {
     const hints = [card.player, card.manufacturer||card.collection, /auto/i.test(card.rarity||"")?"auto":"", serial||""].filter(Boolean).join(" ");
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(hints)}`);
@@ -750,7 +757,7 @@ Responde SOLO con este JSON (sin explicación):
         .map(it => parseEbayPrice(it.price)).filter(p => p && isPriceOk(p, card)).sort((a,b)=>a-b);
       if (prices.length > 0) {
         const median = prices[Math.floor(prices.length/2)];
-        return save({priceEur:median, priceMin:Math.round(median*.65), pricePrem:Math.round(median*1.5), priceSource:"eBay activo", changeWeek:0, changeMonth:0});
+        return save({priceEur:median, priceMin:Math.round(median*.65), pricePrem:Math.round(median*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
       }
     }
   } catch {}
@@ -2672,30 +2679,59 @@ export default function CardGoal() {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
-      const updated = [...col];
-      for(let i = 0; i < col.length; i += 3) {
-        const batch = col.slice(i, i+3);
-        const prices = await Promise.all(batch.map(async (c, j) => {
-          const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
-          // Si ya tiene precio razonable en caché → usarlo (no re-pedir)
-          const cached = lsPriceGet(key);
-          if (cached && isPriceOk(cached.priceEur, c)) return cached;
-          // Si el precio en la carta ya es razonable → aplicar rareza y guardar en caché
-          if (isPriceOk(c.priceEur, c) && c.priceEur > 3) {
-            const r = {priceEur:c.priceEur, priceMin:c.priceMin||Math.round(c.priceEur*.65), pricePrem:c.pricePrem||Math.round(c.priceEur*1.5), priceSource:c.priceSource||"eBay"};
-            lsPriceSet(key, r); return r;
-          }
-          // Precio falta o malo (0, 1, 2, 3…) → borrar caché y buscar de nuevo
-          delete priceCache[key]; lsPriceClear(key);
-          return fetchPrice(c).catch(()=>null);
-        }));
-        prices.forEach((p, j) => {
-          if(!p || !p.priceEur) return;
-          updated[i+j] = {...updated[i+j], priceEur:p.priceEur, priceMin:p.priceMin, pricePrem:p.pricePrem, priceSource:p.priceSource};
+      // Una sola llamada a Sonnet con todas las cartas — igual que pasarle la lista a ChatGPT
+      const cardList = col.map((c, i) => {
+        const serial = c.serialNumber && String(c.serialNumber)!=="null" ? ` NUMERADA ${c.serialNumber}` : "";
+        return `${i+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"}${serial} | ${c.season||"?"}`;
+      }).join("\n");
+
+      const raw = await callAI([{role:"user", content:
+`Eres un experto tasador de cartas de fútbol coleccionables con conocimiento profundo del mercado (eBay, Cardmarket, Todocoleccion). 
+Valora estas ${col.length} cartas en EUR, versión SIN GRADEAR (raw — no PSA/BGS/CGC).
+
+${cardList}
+
+REFERENCIA DE PRECIOS (úsala para calibrar):
+CROMOS ESPAÑOLES (Panini Adrenalyn XL, Liga Este, Megacracks, Mundicromo):
+  - Base/común: 0.10-0.50€ | Limited: 1-5€ | Edición especial: 3-20€
+
+CARTAS INTERNACIONALES (Topps Chrome, Prizm, Select, Finest):
+  - Base jugador normal: 1-4€ | Base jugador top: 3-12€
+  - Prizm/Refractor jugador normal: 4-15€ | jugador top: 10-40€  
+  - Rookie normal: 5-25€ | Rookie prometedor: 15-80€
+  - Auto sin numerar: 20-120€ | jugador top: 80-400€
+  - Auto /99: 30-180€ | Auto /49: 60-300€ | Auto /25: 100-500€
+  - Auto /10: 200-1000€ | Auto /5: 400-2500€ | Auto /1: 1000€+
+  - Patch/Relic: +50% sobre el auto equivalente
+
+JUGADORES TOP (Messi, Cristiano Ronaldo, Mbappé, Vinicius, Lamine Yamal, Bellingham): ×3-8 sobre el rango base.
+JUGADORES SECUNDARIOS (plantilla media): ×0.3-0.6 sobre el rango base.
+
+IMPORTANTE: Si la carta es NUMERADA (/5, /10, /25 etc.) aplica el multiplicador correspondiente.
+NO des precios de cartas gradeadas. SIN GRADEAR siempre.
+
+Devuelve SOLO un array JSON con exactamente ${col.length} objetos en el mismo orden que la lista:
+[{"priceEur":3,"priceMin":1,"pricePrem":8},{"priceEur":450,"priceMin":300,"pricePrem":1200},...]`
+      }], false, 1200, "claude-sonnet-4-6");
+
+      // Parsear array JSON
+      const clean = raw.replace(/```json|```/g,"").trim();
+      const match = clean.match(/\[[\s\S]*\]/);
+      if (!match) throw new Error("No JSON array");
+      const prices = JSON.parse(match[0]);
+
+      if(Array.isArray(prices) && prices.length === col.length) {
+        const updated = col.map((card, i) => {
+          const p = prices[i];
+          if(!p || !isPriceOk(num(p.priceEur), card)) return card;
+          const key = `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.serialNumber||""}|${card.season||""}`;
+          const result = {priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:"Estimación mercado"};
+          priceCache[key] = result; lsPriceSet(key, result); // guardar en caché
+          return {...card, ...result};
         });
+        setCol(updated);
       }
-      setCol(updated);
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error("handleUpdatePrices error:", e); }
     setUpdatingPrices(false);
   },[col, updatingPrices]);
 
