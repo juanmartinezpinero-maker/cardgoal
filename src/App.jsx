@@ -2240,8 +2240,8 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
               <div onClick={()=>onTap({...card})} style={{display:"flex",justifyContent:"center",padding:"20px 16px 14px",background:`linear-gradient(180deg,${C.bg},${C.white})`,cursor:"pointer"}}>
                 <CardViz card={card} sz="xl" ebay={!card._fromEbay} imgUrl={card._fromEbay?card._ebayImg:null}/>
               </div>
-              {/* Info */}
-              <div style={{padding:"10px 16px 0"}}>
+              {/* Info — toda el área es clicable para ver el precio real */}
+              <div onClick={()=>onTap({...card})} style={{padding:"10px 16px 0",cursor:"pointer"}}>
                 <div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{card.player}</div>
                 {card._fromEbay
                   ? <div style={{fontSize:11,color:C.sub,marginTop:2,lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{card._ebayTitle}</div>
@@ -2252,8 +2252,10 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
                   {card.collection&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.bg,color:C.sub,border:`1px solid ${C.border}`}}>{card.collection}</span>}
                   {card.rarity&&card.rarity!=="Base"&&<span style={{padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:C.goldL,color:C.gold,border:`1px solid ${C.gold}44`}}>★ {card.rarity}</span>}
                 </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                  <div style={{fontSize:11,color:C.accent,fontWeight:600}}>👆 {isES?"Toca para valor real":"Tap for real value"}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,marginBottom:4}}>
+                  <div style={{fontSize:11,color:C.accent,fontWeight:700,background:C.accentL,padding:"4px 10px",borderRadius:8,border:`1px solid ${C.accent}33`}}>
+                    👆 {isES?"Ver precio real":"See real price"}
+                  </div>
                   {card._fromEbay
                     ? (card.priceEur!=null&&<div style={{fontSize:11,color:C.sub,fontWeight:600}}>{isES?"Anuncio eBay":"eBay listing"}: {eur(card.priceEur)}</div>)
                     : (card.priceEur&&<div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{eur(card.priceEur)}</div>)}
@@ -2848,3 +2850,4 @@ export default function CardGoal() {
     </div>
   );
 }
+
