@@ -622,6 +622,16 @@ function searchCards(query) {
 
 /* ─── PRICE — web search, called on demand ────────────────── */
 const priceCache = {};
+const PRICE_TTL = 23 * 60 * 60 * 1000; // 23h — precios estables durante el día
+function lsPriceGet(key) {
+  try { const d=JSON.parse(localStorage.getItem(`cg_px_${key.slice(0,80)}`)||"null"); return d&&Date.now()-d.ts<PRICE_TTL?d.v:null; } catch { return null; }
+}
+function lsPriceSet(key, val) {
+  try { localStorage.setItem(`cg_px_${key.slice(0,80)}`,JSON.stringify({v:val,ts:Date.now()})); } catch {}
+}
+function lsPriceClear(key) {
+  try { localStorage.removeItem(`cg_px_${key.slice(0,80)}`); } catch {}
+}
 
 /* Histórico de precios: clave normalizada del cromo + registro (1 vez al día por cromo) */
 function cardKey(card){
@@ -658,6 +668,8 @@ async function fetchPrice(card) {
     : `${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"}${serialLabel} | ${card.season||"?"}`;
   const cacheKey = card._ebayTitle ? `ebay:${desc}` : `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${serial||""}|${card.season||""}`;
   if (priceCache[cacheKey]) return priceCache[cacheKey];
+  const lsCached = lsPriceGet(cacheKey);
+  if (lsCached) { priceCache[cacheKey]=lsCached; return lsCached; }
 
   // ── PASO 1: precio ya en el objeto (viene de búsqueda eBay) → INSTANTÁNEO ──
   if (card._fromEbay && num(card.priceEur) != null && num(card.priceEur) > 0) {
@@ -668,38 +680,53 @@ async function fetchPrice(card) {
     return result;
   }
 
-  // ── PASO 2: eBay API directa → ~1-2s (solo cartas no numeradas, eBay no refleja la prima de rareza) ──
-  if (!serial) {
-    try {
-      const ebay = await fetchEbayCard(card);
-      if (ebay && ebay.price) {
-        const p = parseEbayPrice(ebay.price);
-        if (p && p > 0) {
-          const result = { priceEur:p, priceMin:Math.round(p*0.65), pricePrem:Math.round(p*1.5), priceSource:"eBay (precio de mercado)", changeWeek:0, changeMonth:0 };
-          priceCache[cacheKey] = result;
-          logPriceSnapshot(card, result.priceEur, result.priceSource);
-          return result;
-        }
+  // ── PASO 2: eBay API con query inteligente (incluye auto/numerada/refractor) → ~1-2s ──
+  try {
+    const rarityHints = [];
+    if (/auto/i.test(card.rarity||""))                          rarityHints.push("auto");
+    if (serial)                                                 rarityHints.push(serial);
+    if (/refractor|prizm|holo|silver|gold/i.test(card.rarity||"")) rarityHints.push("refractor");
+    if (/rookie|\brc\b/i.test(card.rarity||""))                 rarityHints.push("rookie");
+    const priceQuery = [card.player, card.manufacturer||card.collection, ...rarityHints].filter(Boolean).join(" ");
+    const r = await fetch(`/api/ebay?q=${encodeURIComponent(priceQuery)}`);
+    if (r.ok) {
+      const data = await r.json();
+      const prices = (data.results||[])
+        .filter(it => it.price && !EBAY_BAD.test(it.title||"") && !GRADED_PAT.test(it.title||""))
+        .map(it => parseEbayPrice(it.price))
+        .filter(p => p && p > 0)
+        .sort((a,b) => a-b);
+      if (prices.length > 0) {
+        const median = prices[Math.floor(prices.length/2)];
+        const result = { priceEur:median, priceMin:Math.round(median*0.65), pricePrem:Math.round(median*1.5), priceSource:"eBay (precio de mercado)", changeWeek:0, changeMonth:0 };
+        priceCache[cacheKey] = result;
+        lsPriceSet(cacheKey, result);
+        logPriceSnapshot(card, median, "eBay");
+        return result;
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
-  // ── PASO 3: estimación Haiku sin búsqueda web → ~2s (fallback rápido) ──
-  const serialNote = serial
-    ? `IMPORTANT: serial numbered card ${serial} — only ${serial.replace("/","")} copies exist worldwide. Worth 10-100x more than a base card. Price accordingly.`
-    : "";
+  // ── PASO 3: estimación Haiku sin búsqueda web → ~2-3s (fallback) ──
+  // Solo cuando eBay no tiene resultados. Sin web search = precio orientativo.
+  const cardType = [
+    card.rarity||"Base",
+    serial ? `Serial ${serial} (${serial.replace("/","")} copias en el mundo)` : "Sin numerar",
+    "Sin gradear (RAW) — NO usar precios PSA/BGS"
+  ].join(", ");
   const estRaw = await callAI([{role:"user",content:
-`Football card price estimate. Reply ONLY with JSON, no explanation.
+`Football card price estimate in EUR. Reply ONLY with JSON.
 Card: ${desc}
-${serialNote}
-IMPORTANT: This is a RAW (ungraded) card — NOT PSA, BGS or CGC graded. Give the price for the raw/ungraded version only. Do NOT use graded card prices.
-Estimate current EUR market price from your knowledge of football card collecting.
-{"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación IA CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
-  }], false, 150);
+Type: ${cardType}
+Give realistic EUR price for this UNGRADED card. If truly unknown, use null.
+Important: Auto cards /99 = ~50-300€, Auto /25 = ~150-800€, Auto /10 = ~300-2000€, Base Prizm = ~5-30€, Base standard = ~1-10€.
+{"priceEur":25,"priceMin":15,"pricePrem":60,"priceSource":"Estimación IA CardGoal","isEstimate":true}`
+  }], false, 250);
   const est = jparse(estRaw);
-  if (est && est.priceEur) {
-    const res = { priceEur:num(est.priceEur), priceMin:num(est.priceMin), pricePrem:num(est.pricePrem), priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0, isEstimate:true };
+  if (est && est.priceEur && num(est.priceEur) > 0) {
+    const res = { priceEur:num(est.priceEur), priceMin:num(est.priceMin)||Math.round(num(est.priceEur)*0.6), pricePrem:num(est.pricePrem)||Math.round(num(est.priceEur)*1.8), priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0, isEstimate:true };
     priceCache[cacheKey] = res;
+    lsPriceSet(cacheKey, res);
     return res;
   }
   return null;
@@ -2618,32 +2645,24 @@ export default function CardGoal() {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
-      // Send all cards in ONE single AI call instead of one by one
-      const cardList = col.map((c,i) => `${i+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"} | ${c.season||"?"}`).join("\n");
-      
-      const raw = await callAI([{role:"user",content:
-`Eres experto tasador de cromos de fútbol. Estima el precio actual de mercado en EUR para estas ${col.length} cartas basándote en eBay, Cardmarket y Todocoleccion:
+      // Borrar caché viejo para forzar precios frescos de eBay
+      col.forEach(c => {
+        const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
+        lsPriceClear(key);
+        delete priceCache[key];
+      });
 
-${cardList}
-
-Devuelve SOLO un array JSON con un objeto por carta en el mismo orden:
-[{"priceEur":25,"priceMin":18,"pricePrem":38,"priceSource":"eBay"},{"priceEur":10,...},...]
-
-Si no conoces el precio de alguna carta pon null para ese objeto.`
-      }], false, 1000);
-
-      // Parse the JSON array
-      const cleaned = raw.replace(/```json|```/g,"").trim();
-      const prices = JSON.parse(cleaned);
-      
-      if(Array.isArray(prices)) {
-        const updated = col.map((card, i) => {
-          const p = prices[i];
-          if(!p || !p.priceEur) return card;
-          return {...card, priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"Estimación"};
+      // Buscar precio real en eBay para cada carta (de 3 en 3 para no saturar la API)
+      const updated = [...col];
+      for(let i = 0; i < col.length; i += 3) {
+        const batch = col.slice(i, i+3);
+        const prices = await Promise.all(batch.map(c => fetchPrice(c).catch(()=>null)));
+        prices.forEach((p, j) => {
+          if(!p || !p.priceEur) return;
+          updated[i+j] = {...updated[i+j], priceEur:p.priceEur, priceMin:p.priceMin, pricePrem:p.pricePrem, priceSource:p.priceSource};
         });
-        setCol(updated);
       }
+      setCol(updated);
     } catch(e) { console.error(e); }
     setUpdatingPrices(false);
   },[col, updatingPrices]);
