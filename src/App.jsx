@@ -2259,16 +2259,14 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
                     : (card.priceEur&&<div style={{fontFamily:FD,fontSize:16,fontWeight:800,color:C.text}}>{eur(card.priceEur)}</div>)}
                 </div>
               </div>
-              {/* Botones: Añadir + Comprar en eBay (solo para cartas de eBay) */}
+              {/* Botones: Añadir + Comprar en eBay (para todas las cartas) */}
               <div style={{padding:"10px 16px 14px", display:"flex", flexDirection:"column", gap:8}}>
                 <button onClick={()=>onAdd(card._fromEbay?{...card,priceEur:null,price:null}:{...card})} disabled={isAdded} style={{width:"100%",padding:"12px",background:isAdded?C.accentL:C.accent,border:isAdded?`1.5px solid ${C.accent}`:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:isAdded?C.accent:"#fff",cursor:isAdded?"default":"pointer",transition:"all .2s"}}>
                   {isAdded?(isES?"✓ En tu colección":"✓ In collection"):(isES?"+ Añadir a colección":"+ Add to collection")}
                 </button>
-                {card._fromEbay&&(
-                  <button onClick={()=>window.open(ebayLinkFor(card),"_blank","noopener")} style={{width:"100%",padding:"12px",background:"linear-gradient(135deg,#0064D2,#0053AE)",border:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                    🛒 {isES?"Comprar en eBay":"Buy on eBay"}
-                  </button>
-                )}
+                <button onClick={()=>window.open(ebayLinkFor(card),"_blank","noopener")} style={{width:"100%",padding:"12px",background:"linear-gradient(135deg,#0064D2,#0053AE)",border:"none",borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  🛒 {isES?"Comprar en eBay":"Buy on eBay"}
+                </button>
               </div>
             </div>
           );
