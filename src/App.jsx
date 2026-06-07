@@ -640,60 +640,69 @@ function logPriceSnapshot(card, priceEur, source){
   }catch{}
 }
 
+// Convierte precio eBay (puede ser $, £, €) a EUR
+function parseEbayPrice(priceStr) {
+  const s = String(priceStr || "");
+  const n = parseFloat(s.replace(/[^0-9.,]/g,"").replace(",",".") || "0");
+  if (!n || n <= 0) return null;
+  if (s.includes("$")) return Math.round(n * 0.92 * 100) / 100;
+  if (s.includes("£")) return Math.round(n * 1.17 * 100) / 100;
+  return Math.round(n * 100) / 100;
+}
+
 async function fetchPrice(card) {
-  // Para cartas de eBay usamos el título completo del anuncio (trae Auto, /99, Relic, etc.)
+  const serial = card.serialNumber && String(card.serialNumber)!=="null" ? String(card.serialNumber) : null;
+  const serialLabel = serial ? ` NUMERADA ${serial}` : "";
   const desc = card._ebayTitle
     ? card._ebayTitle
-    : `${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"} | ${card.season||"?"}`;
-  // Precio del anuncio activo como referencia (si viene de eBay)
-  const listingHint = (card._fromEbay && num(card.priceEur)!=null)
-    ? `\nReferencia: hay un anuncio ACTIVO de esta carta pedido a ${num(card.priceEur)}€ (es precio de venta, no de venta cerrada).`
-    : "";
-
-  // Cache key
-  const cacheKey = card._ebayTitle ? `ebay:${desc}` : `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.season||""}`;
+    : `${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"}${serialLabel} | ${card.season||"?"}`;
+  const cacheKey = card._ebayTitle ? `ebay:${desc}` : `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${serial||""}|${card.season||""}`;
   if (priceCache[cacheKey]) return priceCache[cacheKey];
 
-  const raw = await callAI([{role:"user",content:
-`Busca el precio de mercado en EUR de esta carta de fútbol.
-Carta: ${desc}${listingHint}
-
-INSTRUCCIONES IMPORTANTES:
-- Identifica bien el tipo de carta: si el título indica AUTO/autograph, RELIC/patch, numerada (/99, /25, /10), Rookie (RC), refractor, etc., valórala como tal — esas valen MUCHO más que una base.
-- Busca SOLO en eBay VENTAS COMPLETADAS (sold listings) de los últimos 90 días, NO precios de venta activos
-- Si es una carta PSA/BGS gradeada, busca el precio con ese grado específico
-- Si es carta sin gradear (raw), busca precio sin gradear
-- Para cromos españoles (Mundicromo, Panini Liga, Megacracks) busca en Todocoleccion.net vendidos
-- Calcula la MEDIANA de las ventas encontradas, no el máximo ni el mínimo
-- Convierte USD a EUR multiplicando por 0.92
-
-Devuelve SOLO este JSON con el precio mediano real:
-{"priceEur":250,"priceMin":180,"pricePrem":350,"priceSource":"eBay sold (5 ventas, mediana)","changeWeek":5,"changeMonth":10}
-
-Si no encuentras ventas reales recientes, devuelve: {"priceEur":null}`
-  }], true, 400);
-  const p = jparse(raw);
-  if (!p || !p.priceEur) {
-    // Expert estimate fallback
-    const estRaw = await callAI([{role:"user",content:
-`Tasador experto de cromos de fútbol. Estima valor orientativo para:
-${desc}${listingHint}
-Ten muy en cuenta si es Auto, Relic/Patch, numerada (/99, /25...), Rookie (RC) o refractor: esas valen mucho más que una base.
-Considera: importancia jugador, rareza, época, mercado español vintage.
-SOLO JSON: {"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación experta CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
-    }], false, 200);
-    const est = jparse(estRaw);
-    if (est && est.priceEur) {
-      const res = { priceEur:num(est.priceEur), priceMin:num(est.priceMin), pricePrem:num(est.pricePrem), priceSource:"⚡ Estimación experta", changeWeek:0, changeMonth:0, isEstimate:true };
-      priceCache[cacheKey] = res;
-      return res;
-    }
-    return null;
+  // ── PASO 1: precio ya en el objeto (viene de búsqueda eBay) → INSTANTÁNEO ──
+  if (card._fromEbay && num(card.priceEur) != null && num(card.priceEur) > 0) {
+    const p = num(card.priceEur);
+    const result = { priceEur:p, priceMin:Math.round(p*0.65), pricePrem:Math.round(p*1.5), priceSource:"eBay (anuncio activo)", changeWeek:0, changeMonth:0 };
+    priceCache[cacheKey] = result;
+    logPriceSnapshot(card, result.priceEur, result.priceSource);
+    return result;
   }
-  const result = { priceEur:num(p.priceEur), priceMin:num(p.priceMin), pricePrem:num(p.pricePrem), priceSource:p.priceSource||"eBay/Todocoleccion", changeWeek:num(p.changeWeek)||0, changeMonth:num(p.changeMonth)||0 };
-  priceCache[cacheKey] = result; // cache so same card always gets same price
-  logPriceSnapshot(card, result.priceEur, result.priceSource); // histórico (solo precios reales, no estimaciones)
-  return result;
+
+  // ── PASO 2: eBay API directa → ~1-2s (solo cartas no numeradas, eBay no refleja la prima de rareza) ──
+  if (!serial) {
+    try {
+      const ebay = await fetchEbayCard(card);
+      if (ebay && ebay.price) {
+        const p = parseEbayPrice(ebay.price);
+        if (p && p > 0) {
+          const result = { priceEur:p, priceMin:Math.round(p*0.65), pricePrem:Math.round(p*1.5), priceSource:"eBay (precio de mercado)", changeWeek:0, changeMonth:0 };
+          priceCache[cacheKey] = result;
+          logPriceSnapshot(card, result.priceEur, result.priceSource);
+          return result;
+        }
+      }
+    } catch {}
+  }
+
+  // ── PASO 3: estimación Haiku sin búsqueda web → ~2s (fallback rápido) ──
+  const serialNote = serial
+    ? `IMPORTANT: serial numbered card ${serial} — only ${serial.replace("/","")} copies exist worldwide. Worth 10-100x more than a base card. Price accordingly.`
+    : "";
+  const estRaw = await callAI([{role:"user",content:
+`Football card price estimate. Reply ONLY with JSON, no explanation.
+Card: ${desc}
+${serialNote}
+IMPORTANT: This is a RAW (ungraded) card — NOT PSA, BGS or CGC graded. Give the price for the raw/ungraded version only. Do NOT use graded card prices.
+Estimate current EUR market price from your knowledge of football card collecting.
+{"priceEur":8,"priceMin":3,"pricePrem":15,"priceSource":"Estimación IA CardGoal","changeWeek":0,"changeMonth":0,"isEstimate":true}`
+  }], false, 150);
+  const est = jparse(estRaw);
+  if (est && est.priceEur) {
+    const res = { priceEur:num(est.priceEur), priceMin:num(est.priceMin), pricePrem:num(est.pricePrem), priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0, isEstimate:true };
+    priceCache[cacheKey] = res;
+    return res;
+  }
+  return null;
 }
 
 /* ─── GENERATE CARD SVG ──────────────────────────────────────
@@ -795,11 +804,15 @@ Only include SVG elements. No JavaScript. Use gradients, paths, text, rect, elli
 
 /* ─── SCAN ────────────────────────────────────────────────── */
 const SCAN_P = [
-`Expert football card identifier. Return ONLY valid JSON:
-{"player":"Full name","team":"Club","season":"2023-24","manufacturer":"Panini/Topps/Upper Deck/Adrenalyn/Match Attax","collection":"Set","cardNumber":"/99 or null","rarity":"Base/Silver/Gold/Rookie/Auto/Refractor","condition":"Near Mint","confidence":0.9}
-Not a card: {"player":"NO_CARD","confidence":0}`,
-`Identify football card. Return ONLY JSON: {"player":"name","team":"team","manufacturer":"brand","collection":"set","rarity":"Base","season":"year","cardNumber":null,"condition":"NM","confidence":0.7} Not a card: {"player":"NO_CARD","confidence":0}`,
-`Football card JSON: {"player":"name","team":"team","manufacturer":"brand","collection":"set","rarity":"Base","season":"?","cardNumber":null,"condition":"NM","confidence":0.5}`
+`Expert football card identifier. IMPORTANT: look carefully for any serial/print-run number stamped on the card (e.g. "5/5", "24/99", "1/10" — usually bottom corner, often gold-foil stamped). This is CRITICAL for valuation.
+Return ONLY valid JSON:
+{"player":"Full name","team":"Club","season":"2023-24","manufacturer":"Panini/Topps/Upper Deck/Adrenalyn","collection":"Set name","serialNumber":"/5","rarity":"Numbered /5","condition":"Near Mint","confidence":0.9}
+Rules: if you see X/Y stamped → serialNumber="/Y", rarity="Numbered /Y". If Auto → rarity="Auto /Y". If Patch/Relic → rarity="Patch Auto /Y". If no number → serialNumber=null, rarity="Base/Silver/Gold/Rookie/Refractor" as appropriate.
+Not a card → {"player":"NO_CARD","confidence":0}`,
+`Identify football card. Look for stamped serial number (X/Y format). Return ONLY JSON:
+{"player":"name","team":"team","manufacturer":"brand","collection":"set","serialNumber":"/99 or null","rarity":"Numbered /99 or Base","season":"year","condition":"NM","confidence":0.7}
+Not a card → {"player":"NO_CARD","confidence":0}`,
+`Football card JSON. Check for serial number stamp: {"player":"name","team":"team","manufacturer":"brand","collection":"set","serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.5}`
 ];
 
 async function scanCard(b64, mime) {
@@ -918,7 +931,11 @@ function teamColors(team="") {
    pósters, etc. Cachea por carta para no repetir llamadas.
 ──────────────────────────────────────────────────────────────── */
 const ebayCache = {};
+// Listings a descartar siempre (no son cartas o son artículos distintos)
 const EBAY_BAD = /camiseta|t-?shirt|shirt|jersey|firmad|signed|autograph|enmarcad|framed|p[oó]ster|poster|funda|sleeve|figur|mug|taza|bal[oó]n|botas|boots|album completo|sobre cerrad|booster|caja|box|lote de|bufanda|scarf/i;
+// Cartas GRADEADAS (PSA/BGS/CGC en su cápsula) — valen 10-50x más que la raw sin gradear
+// Se excluyen del precio porque las cartas de los usuarios son sin gradear por defecto
+const GRADED_PAT = /\bpsa\s*\d|\bbgs\s*\d|\bcgc\s*\d|\bsgc\s*\d|beckett\s*\d|\bpsa\s*(gem|mint|nm|ex|vg)|\bslabbed\b|\bgraded\b/i;
 
 const enorm = (s) => (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
 // Token más significativo (palabra más larga) de un texto
@@ -948,6 +965,7 @@ async function fetchEbayCard(card) {
     for (const it of (data.results || [])) {
       if (!it.image) continue;
       if (EBAY_BAD.test(it.title||"")) continue;
+      if (GRADED_PAT.test(it.title||"")) continue;   // excluir cartas gradeadas (PSA/BGS/CGC) — precio inflado
       const t = enorm(it.title);
 
       // Requisitos OBLIGATORIOS para aceptar la foto como "este cromo":
