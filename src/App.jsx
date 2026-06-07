@@ -650,7 +650,38 @@ function logPriceSnapshot(card, priceEur, source){
   }catch{}
 }
 
-// Convierte precio eBay (puede ser $, £, €) a EUR
+// ¿Es este precio razonable para este tipo de carta? Evita valores desorbitados
+function isPriceOk(eur, card) {
+  if (!eur || eur <= 0) return false;
+  const r = (card.rarity||card.serialNumber||"").toLowerCase();
+  const serial = card.serialNumber && String(card.serialNumber)!=="null" ? card.serialNumber : null;
+  if (serial) return eur <= 8000;          // numeradas: puede valer mucho
+  if (/auto/.test(r))        return eur <= 800;
+  if (/prizm|refract|holo|silver|gold/.test(r)) return eur <= 250;
+  if (/rookie|\brc\b/.test(r))   return eur <= 300;
+  return eur <= 60;  // carta base: máximo 60€, si viene más es un error
+}
+
+// Estimación conservadora y ESTABLE basada solo en la rareza — nunca da 1/2/3 ni 1000€
+function rarityEstimate(card) {
+  const r = (card.rarity||"").toLowerCase();
+  const serial = card.serialNumber && String(card.serialNumber)!=="null" ? card.serialNumber : null;
+  const src = "⚡ Estimación orientativa";
+  if (serial) {
+    const n = parseInt((serial||"").replace(/[^0-9]/g,"")) || 99;
+    if (n <= 1)  return {priceEur:600, priceMin:300, pricePrem:1500, priceSource:src};
+    if (n <= 5)  return {priceEur:250, priceMin:120, pricePrem:700,  priceSource:src};
+    if (n <= 10) return {priceEur:130, priceMin:65,  pricePrem:350,  priceSource:src};
+    if (n <= 25) return {priceEur:75,  priceMin:38,  pricePrem:200,  priceSource:src};
+    if (n <= 50) return {priceEur:45,  priceMin:22,  pricePrem:120,  priceSource:src};
+    return             {priceEur:25,  priceMin:12,  pricePrem:70,   priceSource:src};
+  }
+  if (/auto/.test(r))         return {priceEur:22, priceMin:10, pricePrem:65,  priceSource:src};
+  if (/prizm|refract|silver/.test(r)) return {priceEur:10, priceMin:5, pricePrem:28, priceSource:src};
+  if (/gold|holo/.test(r))    return {priceEur:14, priceMin:7, pricePrem:40,  priceSource:src};
+  if (/rookie|\brc\b/.test(r)) return {priceEur:8, priceMin:4, pricePrem:22,  priceSource:src};
+  return                       {priceEur:2,  priceMin:1,  pricePrem:6,   priceSource:src};
+}
 function parseEbayPrice(priceStr) {
   const s = String(priceStr || "");
   const n = parseFloat(s.replace(/[^0-9.,]/g,"").replace(",",".") || "0");
@@ -668,86 +699,64 @@ async function fetchPrice(card) {
     : `${card.player} | ${card.manufacturer||"?"} | ${card.collection||"?"} | ${card.rarity||"Base"}${serialLabel} | ${card.season||"?"}`;
   const cacheKey = card._ebayTitle ? `ebay:${desc}` : `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${serial||""}|${card.season||""}`;
 
-  // ── Caché (memoria + localStorage 23h) → INSTANTÁNEO ──
+  // ── Caché (memoria + localStorage 23h) ──
   if (priceCache[cacheKey]) return priceCache[cacheKey];
   const lsCached = lsPriceGet(cacheKey);
-  if (lsCached) { priceCache[cacheKey]=lsCached; return lsCached; }
+  if (lsCached && isPriceOk(lsCached.priceEur, card)) { priceCache[cacheKey]=lsCached; return lsCached; }
 
-  const save = (result) => {
-    priceCache[cacheKey] = result;
-    lsPriceSet(cacheKey, result);
-    return result;
-  };
+  const save = r => { priceCache[cacheKey]=r; lsPriceSet(cacheKey,r); logPriceSnapshot(card,r.priceEur,r.priceSource); return r; };
 
-  // ── PASO 1: precio ya en el objeto (viene de búsqueda eBay) → INSTANTÁNEO ──
-  if (card._fromEbay && num(card.priceEur) > 0) {
+  // ── PASO 1: precio ya en objeto (búsqueda eBay) → instantáneo ──
+  if (card._fromEbay && isPriceOk(num(card.priceEur), card)) {
     const p = num(card.priceEur);
-    return save({ priceEur:p, priceMin:Math.round(p*0.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0 });
+    return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: Haiku + búsqueda web → ventas CERRADAS reales → ~3-5s ──
-  // Más lento que eBay directo pero mucho más preciso (precios reales vendidos, no anuncios)
-  const serialNote = serial
-    ? `IMPORTANTE: carta NUMERADA ${serial} — solo existen ${serial.replace("/","")} copias en el mundo. Vale 10-100x más que la versión base. Busca específicamente ventas de esta numeración.`
-    : "Carta sin numerar. SOLO precios de cartas SIN GRADEAR (raw) — excluye PSA, BGS, CGC.";
+  // ── PASO 2: Sonnet sin búsqueda web → conoce los precios de cartas por entrenamiento ──
+  // Mismo enfoque que ChatGPT: el modelo sabe cuánto valen las cartas, sin necesidad de buscar
   try {
-    const raw = await callAI([{role:"user",content:
-`Precio de mercado en EUR de esta carta de fútbol. Solo JSON.
+    const serialCtx = serial
+      ? `Es una carta NUMERADA ${serial} (solo existen ${serial.replace("/","")} copias en el mundo). Esto la hace muy rara y valiosa.`
+      : `Es una carta sin numerar, sin gradear (RAW — no PSA/BGS/CGC).`;
+    const raw = await callAI([{role:"user", content:
+`Eres experto en el mercado de cromos y cartas de fútbol coleccionables. Dime el precio actual de mercado en EUR de esta carta.
+
 Carta: ${desc}
-${serialNote}
+${serialCtx}
 
-Busca en eBay ventas CERRADAS (sold/completed listings) últimos 90 días.
-Para cromos españoles busca también en Todocoleccion.net vendidos.
-Calcula la MEDIANA. Convierte USD×0.92, GBP×1.17 a EUR.
+Basa tu respuesta en tu conocimiento del mercado de cartas de fútbol (eBay, Cardmarket, Todocoleccion). 
+Ten en cuenta: edición, jugador, rareza, si es auto/numerada/rookie/refractor.
+Precio para carta SIN GRADEAR (raw). NO des precios de cartas gradeadas PSA/BGS.
 
-{"priceEur":25,"priceMin":15,"pricePrem":50,"priceSource":"eBay sold (N ventas)"}
-Si no hay ventas recientes: {"priceEur":null}`
-    }], true, 350);
+Responde SOLO con este JSON (sin explicación):
+{"priceEur": 25, "priceMin": 15, "pricePrem": 50, "priceSource": "Estimación mercado"}
+`
+    }], false, 300, "claude-sonnet-4-6");
+
     const p = jparse(raw);
-    if (p && num(p.priceEur) > 0) {
-      const result = save({ priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*0.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:p.priceSource||"eBay sold", changeWeek:0, changeMonth:0 });
-      logPriceSnapshot(card, result.priceEur, result.priceSource);
-      return result;
+    if (p && isPriceOk(num(p.priceEur), card)) {
+      return save({priceEur:num(p.priceEur), priceMin:num(p.priceMin)||Math.round(num(p.priceEur)*.65), pricePrem:num(p.pricePrem)||Math.round(num(p.priceEur)*1.5), priceSource:p.priceSource||"Estimación mercado", changeWeek:0, changeMonth:0});
     }
   } catch {}
 
-  // ── PASO 3: eBay API activa (si búsqueda web falla) → ~1-2s ──
+  // ── PASO 3: eBay API activa filtrada (si Sonnet no tiene datos) ──
   try {
-    const rarityHints = [];
-    if (/auto/i.test(card.rarity||"")) rarityHints.push("auto");
-    if (serial) rarityHints.push(serial);
-    const priceQuery = [card.player, card.manufacturer||card.collection, ...rarityHints].filter(Boolean).join(" ");
-    const r = await fetch(`/api/ebay?q=${encodeURIComponent(priceQuery)}`);
+    const hints = [card.player, card.manufacturer||card.collection, /auto/i.test(card.rarity||"")?"auto":"", serial||""].filter(Boolean).join(" ");
+    const r = await fetch(`/api/ebay?q=${encodeURIComponent(hints)}`);
     if (r.ok) {
       const data = await r.json();
       const prices = (data.results||[])
         .filter(it => it.price && !EBAY_BAD.test(it.title||"") && !GRADED_PAT.test(it.title||""))
-        .map(it => parseEbayPrice(it.price)).filter(p => p && p > 0).sort((a,b)=>a-b);
+        .map(it => parseEbayPrice(it.price)).filter(p => p && isPriceOk(p, card)).sort((a,b)=>a-b);
       if (prices.length > 0) {
         const median = prices[Math.floor(prices.length/2)];
-        const result = save({ priceEur:median, priceMin:Math.round(median*0.65), pricePrem:Math.round(median*1.5), priceSource:"eBay (anuncio activo)", changeWeek:0, changeMonth:0 });
-        logPriceSnapshot(card, median, "eBay activo");
-        return result;
+        return save({priceEur:median, priceMin:Math.round(median*.65), pricePrem:Math.round(median*1.5), priceSource:"eBay activo", changeWeek:0, changeMonth:0});
       }
     }
   } catch {}
 
-  // ── PASO 4: estimación Haiku sin web (último recurso) → ~2s ──
-  try {
-    const estRaw = await callAI([{role:"user",content:
-`Precio mercado EUR carta fútbol sin gradear (RAW). Solo JSON.
-Carta: ${desc}
-${serial ? `Serial ${serial}: solo ${serial.replace("/","")} copias, rarísima.` : ""}
-Rangos orientativos: Auto /1=500-5000€ /5=200-2000€ /10=100-800€ /25=80-400€ /99=30-200€ | Prizm base=5-30€ | Base estándar=1-10€ | Rookie premium=10-80€
-{"priceEur":20,"priceMin":12,"pricePrem":45,"priceSource":"Estimación IA","isEstimate":true}`
-    }], false, 200);
-    const est = jparse(estRaw);
-    if (est && num(est.priceEur) > 0) {
-      return save({ priceEur:num(est.priceEur), priceMin:num(est.priceMin)||Math.round(num(est.priceEur)*0.6), pricePrem:num(est.pricePrem)||Math.round(num(est.priceEur)*1.8), priceSource:"⚡ Estimación IA", changeWeek:0, changeMonth:0, isEstimate:true });
-    }
-  } catch {}
-
-  return null;
+  // ── PASO 4: estimación por rareza — nunca da 1/2/3 ni precios imposibles ──
+  return save({...rarityEstimate(card), changeWeek:0, changeMonth:0, isEstimate:true});
 }
 
 /* ─── GENERATE CARD SVG ──────────────────────────────────────
@@ -2663,18 +2672,23 @@ export default function CardGoal() {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
-      // Borrar caché viejo para forzar precios frescos de eBay
-      col.forEach(c => {
-        const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
-        lsPriceClear(key);
-        delete priceCache[key];
-      });
-
-      // Buscar precio real en eBay para cada carta (de 3 en 3 para no saturar la API)
       const updated = [...col];
       for(let i = 0; i < col.length; i += 3) {
         const batch = col.slice(i, i+3);
-        const prices = await Promise.all(batch.map(c => fetchPrice(c).catch(()=>null)));
+        const prices = await Promise.all(batch.map(async (c, j) => {
+          const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
+          // Si ya tiene precio razonable en caché → usarlo (no re-pedir)
+          const cached = lsPriceGet(key);
+          if (cached && isPriceOk(cached.priceEur, c)) return cached;
+          // Si el precio en la carta ya es razonable → aplicar rareza y guardar en caché
+          if (isPriceOk(c.priceEur, c) && c.priceEur > 3) {
+            const r = {priceEur:c.priceEur, priceMin:c.priceMin||Math.round(c.priceEur*.65), pricePrem:c.pricePrem||Math.round(c.priceEur*1.5), priceSource:c.priceSource||"eBay"};
+            lsPriceSet(key, r); return r;
+          }
+          // Precio falta o malo (0, 1, 2, 3…) → borrar caché y buscar de nuevo
+          delete priceCache[key]; lsPriceClear(key);
+          return fetchPrice(c).catch(()=>null);
+        }));
         prices.forEach((p, j) => {
           if(!p || !p.priceEur) return;
           updated[i+j] = {...updated[i+j], priceEur:p.priceEur, priceMin:p.priceMin, pricePrem:p.pricePrem, priceSource:p.priceSource};
