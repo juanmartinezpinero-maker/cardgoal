@@ -2728,27 +2728,6 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
           </button>
         )}
 
-        {/* Update prices button — full width, premium design */}
-        {onUpdatePrices&&!isGuest&&col.length>0&&(
-          <button onClick={onUpdatePrices} disabled={isUpdating} style={{
-            width:"100%",marginTop:12,padding:"12px 16px",
-            background:isUpdating?"transparent":`linear-gradient(135deg,${C.bg3},${C.bg2})`,
-            border:`1px solid ${isUpdating?C.border:C.accent+"44"}`,
-            borderRadius:14,cursor:isUpdating?"default":"pointer",
-            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-            transition:"all .2s",boxShadow:isUpdating?"none":`0 2px 12px ${C.accent}22`
-          }}>
-            <span style={{fontSize:16}}>{isUpdating?"⏳":"🔄"}</span>
-            <div style={{textAlign:"left"}}>
-              <div style={{fontFamily:FD,fontSize:12,fontWeight:700,color:isUpdating?C.hint:C.accent}}>
-                {isUpdating?(isES?"Buscando precios en eBay...":"Searching eBay..."):(isES?"Valorar cartas sin precio":"Price unvalued cards")}
-              </div>
-              {!isUpdating&&<div style={{fontSize:10,color:C.hint,marginTop:1}}>
-                {isES?"Busca en eBay las cartas que aún no tienen precio":"Searches eBay for cards without a price"}</div>}
-            </div>
-          </button>
-        )}
-
         <div style={{display:"flex",gap:6,marginTop:10}}>
           {FILTERS.map(([l,v])=>(
             <div key={v} onClick={()=>setFilt(v)} style={{padding:"5px 14px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",background:filt===v?C.accent:C.bg,color:filt===v?"#fff":C.sub,border:`1px solid ${filt===v?C.accent:C.border}`,transition:"all .15s"}}>{l}</div>
