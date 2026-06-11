@@ -2686,6 +2686,8 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
 /* COLLECTION */
 function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating, isGuest, onRegister, onRefreshCard}) {
   const [filt,setFilt]=useState("all");
+  const [refreshingUid, setRefreshingUid] = useState(null);
+  const [refreshedUid, setRefreshedUid]   = useState(null);
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
   const filtered=col.filter(c=>{
@@ -2765,10 +2767,22 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
                   ✕
                 </button>}
                 {onRefreshCard&&<button
-                  onClick={(e)=>{ e.stopPropagation(); onRefreshCard(card); }}
+                  onClick={async (e)=>{
+                    e.stopPropagation();
+                    setRefreshingUid(card._uid);
+                    setRefreshedUid(null);
+                    await onRefreshCard(card);
+                    setRefreshingUid(null);
+                    setRefreshedUid(card._uid);
+                    setTimeout(()=>setRefreshedUid(null), 2000);
+                  }}
+                  disabled={refreshingUid===card._uid}
                   title={isES?"Actualizar precio desde eBay":"Refresh price from eBay"}
-                  style={{position:"absolute",top:6,left:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.6)",color:C.accent,fontSize:13,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
-                  🔄
+                  style={{position:"absolute",top:6,left:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",
+                    background:refreshedUid===card._uid?"rgba(0,230,118,0.9)":refreshingUid===card._uid?"rgba(0,0,0,0.4)":"rgba(0,0,0,0.6)",
+                    color:refreshedUid===card._uid?"#fff":C.accent,fontSize:13,lineHeight:1,
+                    cursor:refreshingUid===card._uid?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
+                  {refreshingUid===card._uid?"⏳":refreshedUid===card._uid?"✓":"🔄"}
                 </button>}
                 <div style={{display:"flex",justifyContent:"center",padding:"12px 10px 8px",background:`linear-gradient(180deg,${C.bg},${C.white})`}}>
                   <CardViz card={card} photo={card._thumb||null} sz="md" imgUrl={card._fromEbay?card._ebayImg:null}/>
