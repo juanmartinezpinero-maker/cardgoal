@@ -712,20 +712,23 @@ function parseEbayPrice(priceStr) {
 
 // Precio MÍNIMO garantizado según rareza — nunca puede bajar de aquí
 function priceFloor(card) {
-  const serial = card.serialNumber && String(card.serialNumber)!=="null" ? card.serialNumber : null;
+  const serial = card.serialNumber && String(card.serialNumber)!=="null" ? String(card.serialNumber) : null;
   if(serial) {
-    const m = serial.match(/\/(\d+)/);
+    // Acepta "/5", "5/50", "05/50", "5" — cualquier formato de numeración
+    const m = serial.match(/\/(\d+)/) ||   // "/5" o "14/25" → coge el denominador
+              serial.match(/^(\d+)\//)  ||   // "5/" → coge el numerador
+              serial.match(/^(\d+)$/);        // "5" solo → asume que es el total
     const n = m ? parseInt(m[1]) : null;
-    if(n) {
+    if(n && n > 0) {
       if(n <= 1)   return 500;
-      if(n <= 5)   return 150;
-      if(n <= 10)  return 80;
-      if(n <= 25)  return 40;
-      if(n <= 50)  return 20;
-      if(n <= 99)  return 10;
+      if(n <= 5)   return 200;
+      if(n <= 10)  return 100;
+      if(n <= 25)  return 50;
+      if(n <= 50)  return 25;
+      if(n <= 99)  return 15;
     }
   }
-  if(/auto/i.test(card.rarity||"")) return 10;
+  if(/auto/i.test(card.rarity||"")) return 15;
   return 0;
 }
 
@@ -3000,8 +3003,15 @@ export default function CardGoal() {
         .filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
 
       if(!prices.length) return;
-      const floor = priceFloor(card);
+      const floor  = priceFloor(card);
       const median = Math.max(prices[Math.floor(prices.length/2)], floor);
+
+      // PROTECCIÓN CRÍTICA: nunca bajar más del 60% del precio actual
+      const existing = card.priceEur;
+      if(existing && existing > 20 && median < existing * 0.4) {
+        console.warn(`Rejected: ${card.player} ${existing}€ → ${median}€ (drop >60%)`);
+        return;
+      }
       const np = {priceEur:median, priceMin:Math.max(prices[0],floor),
                   pricePrem:prices[prices.length-1],
                   priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`};
