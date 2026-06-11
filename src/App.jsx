@@ -112,6 +112,21 @@ const supa = {
     });
   },
 
+  // Guarda el precio de una carta en Supabase (persistente entre sesiones)
+  async updateCardPrice(id, token, price) {
+    if(!id || !token) return;
+    await fetch(`${SUPA_URL}/rest/v1/collections?id=eq.${id}`, {
+      method:"PATCH",
+      headers:{...this.headers, "Authorization":`Bearer ${token}`, "Prefer":"return=minimal"},
+      body: JSON.stringify({
+        price_eur:   price.priceEur   || null,
+        price_min:   price.priceMin   || null,
+        price_prem:  price.pricePrem  || null,
+        price_source: price.priceSource || null,
+      })
+    });
+  },
+
   async refreshToken(refreshToken) {
     const r = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`, {
       method:"POST",
@@ -695,7 +710,7 @@ function parseEbayPrice(priceStr) {
   return Math.round(n * 100) / 100;
 }
 
-async function fetchPrice(card) {
+async function fetchPrice(card, token = null) {
   const serial = card.serialNumber && String(card.serialNumber)!=="null" ? String(card.serialNumber) : null;
   const serialLabel = serial ? ` NUMERADA ${serial}` : "";
   const desc = card._ebayTitle
@@ -708,7 +723,16 @@ async function fetchPrice(card) {
   const lsCached = lsPriceGet(cacheKey);
   if (lsCached && isPriceOk(lsCached.priceEur, card)) { priceCache[cacheKey]=lsCached; return lsCached; }
 
-  const save = r => { priceCache[cacheKey]=r; lsPriceSet(cacheKey,r); logPriceSnapshot(card,r.priceEur,r.priceSource); return r; };
+  const save = r => {
+    priceCache[cacheKey] = r;
+    lsPriceSet(cacheKey, r);
+    logPriceSnapshot(card, r.priceEur, r.priceSource);
+    // Persistir en Supabase para que el precio sobreviva recargas y sesiones
+    if(card._dbId && token) {
+      supa.updateCardPrice(card._dbId, token, r).catch(()=>{});
+    }
+    return r;
+  };
 
   // ── PASO 1: precio ya en objeto (búsqueda eBay) → instantáneo ──
   if (card._fromEbay && isPriceOk(num(card.priceEur), card)) {
@@ -716,52 +740,53 @@ async function fetchPrice(card) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: eBay real — misma API que ya funciona en búsqueda, query específica ──
+  // ── PASO 2: eBay + Wallapop EN PARALELO ──
   try {
-    // Query lo más específica posible con todos los datos de la carta
     const isAuto = /auto/i.test(card.rarity||"");
-    const queryParts = [
-      card.player,
-      card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
-      card.collection  && card.collection !=="?" ? card.collection  : "",
-      card.season      && card.season      !=="?" ? card.season      : "",
-      isAuto ? "auto" : "",
-      serial || ""
-    ].filter(Boolean);
-    const searchQ = queryParts.join(" ").trim();
+    const searchQ = [card.player,
+      card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
+      card.collection&&card.collection!=="?"?card.collection:"",
+      card.season&&card.season!=="?"?card.season:"",
+      isAuto?"auto":"", serial||""
+    ].filter(Boolean).join(" ").trim();
+    const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
+    const hasAuto  = isAuto;
 
-    const r = await fetch(`/api/ebay?q=${encodeURIComponent(searchQ)}`);
-    if(r.ok) {
-      const data = await r.json();
-      const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
-      const hasAuto = /auto/i.test(card.rarity||"");
-      const prices = (data.results||[])
-        .filter(it =>
-          it.price &&
-          !GRADED_PAT.test(it.title||"") &&
-          !EBAY_BAD.test(it.title||"") &&
-          // Si la carta NO tiene auto, excluir listings con auto (evita precios inflados)
-          (hasAuto || !/\bauto\b|\bautograph\b|\bfirm/i.test(it.title||"")) &&
-          (lastName.length < 3 || (it.title||"").toLowerCase().includes(lastName))
-        )
-        .map(it => parseEbayPrice(it.price))
-        .filter(p => p && isPriceOk(p, card))
-        .sort((a,b) => a-b);
+    const [ebayRes, wallaRes] = await Promise.allSettled([
+      fetch(`/api/ebay?q=${encodeURIComponent(searchQ)}`).then(r=>r.ok?r.json():null),
+      fetch(`/api/wallapop?q=${encodeURIComponent(searchQ)}`).then(r=>r.ok?r.json():null),
+    ]);
 
-      if(prices.length >= 1) {
-        const median = prices[Math.floor(prices.length/2)];
-        return save({
-          priceEur: median,
-          priceMin: prices[0],
-          pricePrem: prices[prices.length-1],
-          priceSource: `eBay · ${prices.length} anuncio${prices.length>1?"s":""}`,
-          changeWeek:0, changeMonth:0
-        });
-      }
+    const ebayData  = ebayRes.status==="fulfilled"  ? ebayRes.value  : null;
+    const wallaData = wallaRes.status==="fulfilled" ? wallaRes.value : null;
+
+    const ebayPrices = (ebayData?.results||[])
+      .filter(it => it.price && !GRADED_PAT.test(it.title||"") && !EBAY_BAD.test(it.title||"") &&
+        (hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||"")) &&
+        (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+      .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
+
+    const wallaPrices = (wallaData?.results||[])
+      .filter(it => it.priceEur &&
+        (hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||"")) &&
+        (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+      .map(it=>it.priceEur).filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
+
+    const allPrices = [...ebayPrices,...wallaPrices].sort((a,b)=>a-b);
+    if(allPrices.length>=1){
+      const median  = allPrices[Math.floor(allPrices.length/2)];
+      const ebayMed = ebayPrices.length ? ebayPrices[Math.floor(ebayPrices.length/2)] : null;
+      const wallaMed= wallaPrices.length? wallaPrices[Math.floor(wallaPrices.length/2)]: null;
+      const sources = [
+        ebayPrices.length  ? `eBay (${ebayPrices.length})`     : null,
+        wallaPrices.length ? `Wallapop (${wallaPrices.length})` : null,
+      ].filter(Boolean).join(" + ");
+      return save({priceEur:median, priceMin:allPrices[0], pricePrem:allPrices[allPrices.length-1],
+        priceEbay:ebayMed, priceWalla:wallaMed, priceSource:sources, changeWeek:0, changeMonth:0});
     }
   } catch {}
 
-  // ── PASO 3: Sonnet solo si eBay no encuentra nada ──
+  // ── PASO 3: Sonnet solo si no hay datos de mercado ──
   try {
     const serialCtx = serial
       ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo).`
@@ -2349,13 +2374,13 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
       }
       setBackDone(true);
       setPh("pricing");
-      let p=null;try{p=await fetchPrice(finalCard);}catch{}
+      let p=null;try{p=await fetchPrice(finalCard, user?.token);}catch{}
       setPrice(p);setPh("result");
     }catch(e){
       console.error("back scan error",e);
       // Si falla el reverso, seguimos con los datos del frente
       setPh("pricing");
-      let p=null;try{p=await fetchPrice(card);}catch{}
+      let p=null;try{p=await fetchPrice(card, user?.token);}catch{}
       setPrice(p);setPh("result");
     }
   },[card]);
@@ -2364,7 +2389,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
     // Sin numeración en el reverso — busca precio solo con datos del frente
     setBackDone(true);
     setPh("pricing");
-    let p=null;try{p=await fetchPrice(card);}catch{}
+    let p=null;try{p=await fetchPrice(card, user?.token);}catch{}
     setPrice(p);setPh("result");
   },[card]);
 
@@ -2525,6 +2550,15 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
               </div>}
               {!price?.soldCount&&!price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
                 {isES?"Precio que pide el vendedor, no precio vendido":"Seller asking price, not sold price"}
+              </div>}
+              {/* Precios por plataforma */}
+              {(price?.priceEbay||price?.priceWalla)&&<div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                {price.priceEbay&&<span style={{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 10px",color:C.sub}}>
+                  🌍 eBay: <b style={{color:C.text}}>{eur(price.priceEbay)}</b>
+                </span>}
+                {price.priceWalla&&<span style={{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 10px",color:C.sub}}>
+                  🇪🇸 Wallapop: <b style={{color:C.text}}>{eur(price.priceWalla)}</b>
+                </span>}
               </div>}
               {price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
                 {isES?"Sin datos en eBay — estimación por rareza":"No eBay data — rarity estimate"}
@@ -2844,62 +2878,92 @@ export default function CardGoal() {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
-      // "Actualizar" siempre pide precios frescos — borra caché de todas las cartas
-      col.forEach(c => {
-        const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
-        lsPriceClear(key);
-        delete priceCache[key];
+      const toUpdate = col.map((c,i)=>({c,i})).filter(({c})=>!c.priceEur||c.priceEur<=3||!isPriceOk(c.priceEur,c));
+      if(toUpdate.length===0){ setUpdatingPrices(false); return; }
+      const updated = [...col];
+
+      // FASE 1: eBay + Wallapop en paralelo para todas las cartas
+      const marketResults = await Promise.allSettled(toUpdate.map(async ({c})=>{
+        const isAuto = /auto/i.test(c.rarity||"");
+        const q = [c.player,
+          c.manufacturer&&c.manufacturer!=="?"?c.manufacturer:"",
+          c.collection&&c.collection!=="?"?c.collection:"",
+          c.season&&c.season!=="?"?c.season:"",
+          isAuto?"auto":"",
+          c.serialNumber&&String(c.serialNumber)!=="null"?c.serialNumber:""
+        ].filter(Boolean).join(" ").trim();
+        const lastName=(c.player||"").split(" ").slice(-1)[0].toLowerCase();
+        const hasAuto=isAuto;
+        const [eR,wR]=await Promise.allSettled([
+          fetch(`/api/ebay?q=${encodeURIComponent(q)}`).then(r=>r.ok?r.json():null),
+          fetch(`/api/wallapop?q=${encodeURIComponent(q)}`).then(r=>r.ok?r.json():null),
+        ]);
+        const ePrices=((eR.status==="fulfilled"?eR.value:null)?.results||[])
+          .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
+            (hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
+            (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+          .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,c)).sort((a,b)=>a-b);
+        const wPrices=((wR.status==="fulfilled"?wR.value:null)?.results||[])
+          .filter(it=>it.priceEur&&(hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
+            (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+          .map(it=>it.priceEur).filter(p=>p&&isPriceOk(p,c)).sort((a,b)=>a-b);
+        const all=[...ePrices,...wPrices].sort((a,b)=>a-b);
+        if(!all.length) return null;
+        const median=all[Math.floor(all.length/2)];
+        const eMed=ePrices.length?ePrices[Math.floor(ePrices.length/2)]:null;
+        const wMed=wPrices.length?wPrices[Math.floor(wPrices.length/2)]:null;
+        const src=[ePrices.length?`eBay (${ePrices.length})`:null,wPrices.length?`Wallapop (${wPrices.length})`:null].filter(Boolean).join(" + ");
+        return {priceEur:median,priceMin:all[0],pricePrem:all[all.length-1],priceEbay:eMed,priceWalla:wMed,priceSource:src};
+      }));
+
+      const needSonnet=[];
+      marketResults.forEach((res,n)=>{
+        const {c,i}=toUpdate[n];
+        const p=res.status==="fulfilled"?res.value:null;
+        if(p&&isPriceOk(p.priceEur,c)){
+          updated[i]={...updated[i],...p};
+          const key=`${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
+          lsPriceSet(key,p);
+          if(c._dbId&&user?.token) supa.updateCardPrice(c._dbId,user.token,p).catch(()=>{});
+        } else { needSonnet.push(toUpdate[n]); }
       });
 
-      // Una sola llamada a Sonnet con todas las cartas
-      const cardList = col.map((c, n) => {
-        const serial = c.serialNumber && String(c.serialNumber)!=="null" ? ` NUMERADA ${c.serialNumber}` : "";
-        return `${n+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"}${serial} | ${c.season||"?"}`;
-      }).join("\n");
-
-      const raw = await callAI([{role:"user", content:
-`Experto tasador de cartas de fútbol coleccionables. Valora estas ${col.length} cartas en EUR (SIN GRADEAR, raw, no PSA/BGS):
+      // FASE 2: Sonnet para cartas sin datos de mercado
+      if(needSonnet.length>0){
+        const cardList=needSonnet.map(({c},n)=>{
+          const serial=c.serialNumber&&String(c.serialNumber)!=="null"?` NUMERADA ${c.serialNumber}`:"";
+          return `${n+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"}${serial} | ${c.season||"?"}`;
+        }).join("\n");
+        const raw=await callAI([{role:"user",content:
+`Experto tasador de cartas de fútbol. Valora estas ${needSonnet.length} cartas en EUR (SIN GRADEAR, raw):
 
 ${cardList}
 
-RANGOS DE REFERENCIA:
-- Cromo base jugador común: 0.5-3€ | jugador conocido: 2-8€ | jugador top (Messi/CR7/Mbappé/Yamal/Vinicius): 5-25€
-- Prizm/Refractor/Foil: 4-15€ | jugador top: 15-60€
-- Rookie prometedor: 10-60€ | Rookie top: 30-200€
-- Auto sin numerar: 15-100€ | jugador top: 80-500€
-- Auto /99: 30-150€ | Auto /50: 80-350€ | Auto /25: 150-600€ | Auto /10: 300-1500€ | Auto /5: 600-3000€
-- Numerada sin auto: aprox. 25-30% del precio del auto equivalente
-- Vintage/clásico (antes del 2010): puede valer 2-5x más según el jugador
-- MUY IMPORTANTE — jugadores calientes en mercado actual: Endrick (Real Madrid), Lamine Yamal, Bellingham, Vinicius Jr — sus autos numerados valen ×2-4 sobre el rango base mínimo
-
-Devuelve SOLO un JSON array con exactamente ${col.length} objetos en el mismo orden:
-[{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
-      }], false, 1000, "claude-sonnet-4-6");
-
-      const updated = [...col];
-      const clean = raw.replace(/```json|```/g,"").trim();
-      const match = clean.match(/\[[\s\S]*\]/);
-      if(match) {
-        const prices = JSON.parse(match[0]);
-        col.forEach((card, i) => {
-          const p = prices[i];
-          const newPrice = num(p?.priceEur);
-          if(!newPrice || newPrice <= 0 || !isPriceOk(newPrice, card)) return;
-          const result = {
-            priceEur: newPrice,
-            priceMin: num(p.priceMin) || Math.round(newPrice * 0.65),
-            pricePrem: num(p.pricePrem) || Math.round(newPrice * 1.5),
-            priceSource: "Estimación mercado"
-          };
-          updated[i] = {...updated[i], ...result};
-          const key = `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.serialNumber||""}|${card.season||""}`;
-          lsPriceSet(key, result);
-        });
+RANGOS: Base común=0.5-3€ | Base top=5-25€ | Prizm=5-60€ | Auto=20-500€ | Auto /50=100-350€ | Auto /25=150-600€ | Auto /10=300-1500€ | Auto /5=600-3000€
+Endrick/Yamal/Vinicius/Bellingham: ×2-3 sobre rangos.
+SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
+        }],false,600,"claude-sonnet-4-6");
+        try{
+          const match=(raw.replace(/\`\`\`json|\`\`\`/g,"").trim()).match(/\[\s\S]*\]/);
+          if(match){
+            const prices=JSON.parse(match[0]);
+            needSonnet.forEach(({c,i},n)=>{
+              const p=prices[n]; const np=num(p?.priceEur);
+              if(!np||!isPriceOk(np,c)) return;
+              const result={priceEur:np,priceMin:num(p.priceMin)||Math.round(np*.65),
+                pricePrem:num(p.pricePrem)||Math.round(np*1.5),priceSource:"Estimación IA"};
+              updated[i]={...updated[i],...result};
+              const key=`${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
+              lsPriceSet(key,result);
+              if(c._dbId&&user?.token) supa.updateCardPrice(c._dbId,user.token,result).catch(()=>{});
+            });
+          }
+        }catch(e){console.error("Sonnet parse:",e);}
       }
       setCol(updated);
-    } catch(e) { console.error("handleUpdatePrices:", e); }
+    } catch(e){ console.error("handleUpdatePrices:",e); }
     setUpdatingPrices(false);
-  },[col, updatingPrices]);
+  },[col,updatingPrices,user]);
 
   const addAlert = useCallback((card, targetPrice) => {
     setPriceAlerts(prev=>[...prev, {card, targetPrice, _uid:`alert_${Date.now()}`}]);
