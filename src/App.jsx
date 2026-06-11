@@ -3158,7 +3158,7 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
             {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang} tally={tally}/>}
             {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")} gate={gate} tally={tally}/>}
             {screen==="collection" &&((user||col.length>0)
-              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)} onRefreshCard={!isGuest?handleRefreshCard:null}/>
+              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)} onRefreshCard={user?handleRefreshCard:null}/>
               : <GuestCollectionCTA lang={lang} onRegister={()=>setShowAuth(true)}/>)}
             {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")} gate={gate} tally={tally}/>}
           </>
