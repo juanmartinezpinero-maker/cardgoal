@@ -2993,7 +2993,6 @@ export default function CardGoal() {
                   priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`};
       setCol(prev=>prev.map(c=>c._uid===card._uid?{...c,...np}:c));
       if(card._dbId&&user?.token) supa.updateCardPrice(card._dbId,user.token,np).catch(()=>{});
-      addAlert(`✓ ${card.player}: ${eur(median)}`);
     } catch(e){ console.error("refreshCard",e); }
   },[user]);
 
