@@ -2684,7 +2684,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
 }
 
 /* COLLECTION */
-function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating, isGuest, onRegister}) {
+function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating, isGuest, onRegister, onRefreshCard}) {
   const [filt,setFilt]=useState("all");
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
@@ -2764,6 +2764,12 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
                   style={{position:"absolute",top:6,right:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.6)",color:C.red,fontSize:14,fontWeight:800,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
                   ✕
                 </button>}
+                {onRefreshCard&&<button
+                  onClick={(e)=>{ e.stopPropagation(); onRefreshCard(card); }}
+                  title={isES?"Actualizar precio desde eBay":"Refresh price from eBay"}
+                  style={{position:"absolute",top:6,left:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.6)",color:C.accent,fontSize:13,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
+                  🔄
+                </button>}
                 <div style={{display:"flex",justifyContent:"center",padding:"12px 10px 8px",background:`linear-gradient(180deg,${C.bg},${C.white})`}}>
                   <CardViz card={card} photo={card._thumb||null} sz="md" imgUrl={card._fromEbay?card._ebayImg:null}/>
                 </div>
@@ -2791,6 +2797,15 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
+  const [swUpdate, setSwUpdate] = useState(false); // PWA nueva versión disponible
+
+  // Detectar actualización del Service Worker y notificar al usuario
+  useEffect(()=>{
+    if(!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      setSwUpdate(true); // Mostrar banner de nueva versión
+    });
+  },[]);
   // Analytics: registra cada sección como una "página" en Google Analytics
   useEffect(()=>{
     if(typeof window==="undefined" || !window.gtag) return;
@@ -2947,6 +2962,41 @@ export default function CardGoal() {
 
   const [updatingPrices, setUpdatingPrices] = useState(false);
 
+  // Actualiza el precio de una carta concreta desde eBay y guarda en Supabase
+  const handleRefreshCard = useCallback(async (card) => {
+    try {
+      const isAuto = /auto/i.test(card.rarity||"");
+      const serial = card.serialNumber&&String(card.serialNumber)!=="null"?card.serialNumber:null;
+      const q = [card.player,
+        card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
+        card.collection&&card.collection!=="?"?card.collection:"",
+        card.season&&card.season!=="?"?card.season:"",
+        isAuto?"auto":"", serial||""
+      ].filter(Boolean).join(" ").trim();
+
+      const r = await fetch(`/api/ebay?q=${encodeURIComponent(q)}`);
+      if(!r.ok) return;
+      const data = await r.json();
+      const lastName=(card.player||"").split(" ").slice(-1)[0].toLowerCase();
+      const prices = (data.results||[])
+        .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
+          (isAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
+          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+        .map(it=>parseEbayPrice(it.price))
+        .filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
+
+      if(!prices.length) return;
+      const floor = priceFloor(card);
+      const median = Math.max(prices[Math.floor(prices.length/2)], floor);
+      const np = {priceEur:median, priceMin:Math.max(prices[0],floor),
+                  pricePrem:prices[prices.length-1],
+                  priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`};
+      setCol(prev=>prev.map(c=>c._uid===card._uid?{...c,...np}:c));
+      if(card._dbId&&user?.token) supa.updateCardPrice(card._dbId,user.token,np).catch(()=>{});
+      addAlert(`✓ ${card.player}: ${eur(median)}`);
+    } catch(e){ console.error("refreshCard",e); }
+  },[user]);
+
   const handleUpdatePrices = useCallback(async () => {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
@@ -3085,6 +3135,20 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
         </div>
       </div>
 
+      {/* Banner de nueva versión disponible */}
+      {swUpdate&&(
+        <div style={{background:"linear-gradient(135deg,#00c853,#00e676)",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,zIndex:999}}>
+          <div>
+            <div style={{fontFamily:FD,fontSize:13,fontWeight:800,color:"#000"}}>✨ Nueva versión disponible</div>
+            <div style={{fontSize:11,color:"rgba(0,0,0,0.7)"}}>Toca para actualizar CardGoal</div>
+          </div>
+          <button onClick={()=>window.location.reload()}
+            style={{padding:"8px 16px",background:"#000",border:"none",borderRadius:10,fontFamily:FD,fontSize:12,fontWeight:800,color:"#00e676",cursor:"pointer",flexShrink:0}}>
+            Actualizar
+          </button>
+        </div>
+      )}
+
       {/* Main content — full width */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
@@ -3095,7 +3159,7 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
             {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang} tally={tally}/>}
             {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")} gate={gate} tally={tally}/>}
             {screen==="collection" &&((user||col.length>0)
-              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)}/>
+              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)} onRefreshCard={!isGuest?handleRefreshCard:null}/>
               : <GuestCollectionCTA lang={lang} onRegister={()=>setShowAuth(true)}/>)}
             {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")} gate={gate} tally={tally}/>}
           </>
