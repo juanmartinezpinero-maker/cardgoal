@@ -1468,14 +1468,21 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang, onPriceUpda
 
   useEffect(()=>{
     let alive=true;
-    // If we have an estimate, show it immediately (no loading state)
-    if(estimatedPrice) setPrice(estimatedPrice);
-    setLoading(!estimatedPrice); // only show loading if no estimate
-
-    // Always fetch real price from eBay in background
-    fetchPrice(card)
-      .then(p=>{ if(alive && p){ setPrice({...p,_isEstimate:false}); setLoading(false); } })
-      .catch(()=>{ if(alive) setLoading(false); });
+    // Si la carta ya tiene precio → mostrarlo directamente, sin buscar en eBay
+    if(card.priceEur && card.priceEur > 0) {
+      setPrice({
+        priceEur: card.priceEur, priceMin: card.priceMin, pricePrem: card.pricePrem,
+        priceSource: card.priceSource || card._priceSource || "Precio guardado",
+        changeWeek: card.changeWeek, changeMonth: card.changeMonth,
+      });
+      setLoading(false);
+    } else {
+      // Sin precio → buscar en eBay automáticamente (primera vez)
+      setLoading(true);
+      fetchPrice(card)
+        .then(p=>{ if(alive && p){ setPrice(p); setLoading(false); } })
+        .catch(()=>{ if(alive) setLoading(false); });
+    }
     return()=>{alive=false;};
   },[card._uid]);
 
