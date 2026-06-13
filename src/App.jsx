@@ -2473,11 +2473,8 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
       setCard(c);
       incrementScan(userId);
       tally && tally("scan");
-      // Tracking: escaneo completado
-      if(user?.id && user?.token) {
-        supa.trackEvent(user.id, user.token, {type:'scan', player:c.player, manufacturer:c.manufacturer, collection:c.collection, rarity:c.rarity});
-      }
-      setPh("back_prompt"); // Siempre pedir el reverso antes de buscar precio
+      // Tracking: escaneo completado (se completa en addCard con acceso a user)
+      setPh("back_prompt");
     }catch(e){
       const msg = e.message==="NO_CARD"
         ? (isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card.")
