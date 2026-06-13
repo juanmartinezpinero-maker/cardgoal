@@ -112,6 +112,25 @@ const supa = {
     });
   },
 
+  // Tracking de comportamiento — fire and forget, nunca bloquea la UI
+  trackEvent(userId, token, event) {
+    if(!userId || !token || !event?.type) return;
+    fetch(`${SUPA_URL}/rest/v1/card_events`, {
+      method:"POST",
+      headers:{...this.headers, "Authorization":`Bearer ${token}`},
+      body: JSON.stringify({
+        user_id:        userId,
+        event_type:     event.type,
+        player:         event.player         || null,
+        manufacturer:   event.manufacturer   || null,
+        collection_name:event.collection     || null,
+        rarity:         event.rarity         || null,
+        price_eur:      event.priceEur       || null,
+        search_query:   event.query          || null,
+      })
+    }).catch(()=>{}); // Silencioso — no afecta a la UX
+  },
+
   // Guarda el precio de una carta en Supabase (persistente entre sesiones)
   async updateCardPrice(id, token, price) {
     if(!id || !token) return;
@@ -674,11 +693,11 @@ function isPriceOk(eur, card) {
   if (!eur || eur <= 0) return false;
   const r = (card.rarity||card.serialNumber||"").toLowerCase();
   const serial = card.serialNumber && String(card.serialNumber)!=="null" ? card.serialNumber : null;
-  if (serial) return eur <= 8000;          // numeradas: puede valer mucho
-  if (/auto/.test(r))        return eur <= 800;
-  if (/prizm|refract|holo|silver|gold/.test(r)) return eur <= 250;
-  if (/rookie|\brc\b/.test(r))   return eur <= 300;
-  return eur <= 60;  // carta base: máximo 60€, si viene más es un error
+  if (serial)                                    return eur <= 8000; // numeradas: puede valer mucho
+  if (/auto/.test(r))                            return eur <= 1500; // autos: hasta 1500€
+  if (/prizm|refract|holo|silver|gold/.test(r)) return eur <= 500;  // parallels premium
+  if (/rookie|\brc\b/.test(r))                   return eur <= 500;  // rookies
+  return eur <= 400; // base — sube a 400€ para cubrir vintage (Euro 2004, WC 2002...) y leyendas
 }
 
 // Estimación conservadora y ESTABLE basada solo en la rareza — nunca da 1/2/3 ni 1000€
@@ -775,33 +794,55 @@ async function fetchPrice(card, token = null) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: eBay — precios reales de mercado ──
+  // ── PASO 2: eBay — fuente principal de precios ──
   try {
-    const isAuto = /auto/i.test(card.rarity||"");
-    const searchQ = [card.player,
-      card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
-      card.collection&&card.collection!=="?"?card.collection:"",
-      card.season&&card.season!=="?"?card.season:"",
-      isAuto?"auto":"", serial||""
+    const isAuto   = /auto/i.test(card.rarity||"");
+    const isGraded = /\bpsa\b|\bbgs\b|\bsgc\b|\bcgc\b/i.test(card.rarity||"");
+
+    const searchQ = [
+      card.player,
+      card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
+      card.collection   && card.collection!=="?"   ? card.collection   : "",
+      card.cardNumber   && card.cardNumber!=="null" ? card.cardNumber  : "",
+      card.season       && card.season!=="?"        ? card.season      : "",
+      isAuto ? "auto" : "",
+      serial || "",
     ].filter(Boolean).join(" ").trim();
+
     const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
-    const hasAuto  = isAuto;
 
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(searchQ)}`);
     if(r.ok) {
       const data = await r.json();
       const prices = (data?.results||[])
-        .filter(it => it.price && !GRADED_PAT.test(it.title||"") && !EBAY_BAD.test(it.title||"") &&
-          (hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||"")) &&
-          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
-        .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
-      if(prices.length>=1){
-        const median=prices[Math.floor(prices.length/2)];
-        return save({priceEur:median, priceMin:prices[0], pricePrem:prices[prices.length-1],
-          priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`, changeWeek:0, changeMonth:0});
+        .filter(it => {
+          if(!it.price) return false;
+          if(EBAY_BAD_ALWAYS.test(it.title||"")) return false;
+          if(!isAuto && EBAY_BAD_NONAUTO.test(it.title||"")) return false;
+          if(!isGraded && GRADED_PAT.test(it.title||"")) return false;
+          if(lastName.length>=3 && !(it.title||"").toLowerCase().includes(lastName)) return false;
+          return true;
+        })
+        .map(it => parseEbayPrice(it.price))
+        .filter(p => p && isPriceOk(p, card))
+        .sort((a,b) => a-b);
+
+      if(prices.length >= 1) {
+        const floor  = priceFloor(card);
+        const median = Math.max(prices[Math.floor(prices.length/2)], floor);
+        const src    = isGraded
+          ? `eBay · ${prices.length} resultados (gradeada)`
+          : `eBay · ${prices.length} anuncio${prices.length>1?"s":""}`;
+        return save({
+          priceEur:  median,
+          priceMin:  Math.max(prices[0], floor),
+          pricePrem: prices[prices.length-1],
+          priceSource: src,
+          changeWeek:0, changeMonth:0
+        });
       }
     }
-  } catch {}
+  } catch(e){ console.error("fetchPrice eBay:", e.message); }
 
   // ── PASO 3: Sonnet solo si no hay datos de mercado ──
   try {
@@ -941,15 +982,21 @@ If nothing special found: {"serialNumber":null,"catalogNumber":null,"hasAuto":fa
 }
 
 const SCAN_P = [
-`Expert football card identifier. IMPORTANT: look carefully for any serial/print-run number stamped on the card (e.g. "5/5", "24/99", "1/10" — usually bottom corner, often gold-foil stamped). This is CRITICAL for valuation.
+`Expert football card identifier. Look carefully for:
+1) Serial/print-run number stamped on card (e.g. "5/5", "24/99" — usually bottom corner, gold-foil stamped)
+2) Card catalog number (e.g. "#UCALY", "A72", "#MB-01" — usually small text on front or back)
+3) Set/subset name (e.g. "Ultimate Stage", "Balón Oro", "Mega Crack")
 Return ONLY valid JSON:
-{"player":"Full name","team":"Club","season":"2023-24","manufacturer":"Panini/Topps/Upper Deck/Adrenalyn","collection":"Set name","serialNumber":"/5","rarity":"Numbered /5","condition":"Near Mint","confidence":0.9}
-Rules: if you see X/Y stamped → serialNumber="/Y", rarity="Numbered /Y". If Auto → rarity="Auto /Y". If Patch/Relic → rarity="Patch Auto /Y". If no number → serialNumber=null, rarity="Base/Silver/Gold/Rookie/Refractor" as appropriate.
+{"player":"Full name","team":"Club","season":"2023-24","manufacturer":"Panini/Topps/Upper Deck","collection":"Set name","cardNumber":"#UCALY or null","serialNumber":"/5 or null","rarity":"Auto /5 or Base","condition":"Near Mint","confidence":0.9}
+Rules: serial X/Y stamped → serialNumber="/Y". Auto → rarity="Auto". PSA slab visible → add "PSA" to rarity. Not a card → {"player":"NO_CARD","confidence":0}`,
+
+`Identify football card. Look for: stamped serial (X/Y), card number (#CODE), set name.
+Return ONLY JSON:
+{"player":"name","team":"team","manufacturer":"brand","collection":"set","cardNumber":"#CODE or null","serialNumber":"/99 or null","rarity":"Numbered /99 or Base or Auto","season":"year","condition":"NM","confidence":0.7}
 Not a card → {"player":"NO_CARD","confidence":0}`,
-`Identify football card. Look for stamped serial number (X/Y format). Return ONLY JSON:
-{"player":"name","team":"team","manufacturer":"brand","collection":"set","serialNumber":"/99 or null","rarity":"Numbered /99 or Base","season":"year","condition":"NM","confidence":0.7}
-Not a card → {"player":"NO_CARD","confidence":0}`,
-`Football card JSON. Check for serial number stamp: {"player":"name","team":"team","manufacturer":"brand","collection":"set","serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.5}`
+
+`Football card JSON. Find serial number and card number if visible:
+{"player":"name","team":"team","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.5}`
 ];
 
 async function scanCard(b64, mime) {
@@ -1069,7 +1116,12 @@ function teamColors(team="") {
 ──────────────────────────────────────────────────────────────── */
 const ebayCache = {};
 // Listings a descartar siempre (no son cartas o son artículos distintos)
-const EBAY_BAD = /camiseta|t-?shirt|shirt|jersey|firmad|signed|autograph|enmarcad|framed|p[oó]ster|poster|funda|sleeve|figur|mug|taza|bal[oó]n|botas|boots|album completo|sobre cerrad|booster|caja|box|lote de|bufanda|scarf/i;
+// Siempre filtrar: esto nunca es una carta (camisetas, álbumes, sobres, pósters...)
+const EBAY_BAD_ALWAYS = /camiseta|t-?shirt|shirt|jersey|enmarcad|framed|p[oó]ster|poster|funda|sleeve|figur|mug|taza|bal[oó]n|botas|boots|album completo|sobre cerrad|booster|caja|box set|lote de \d|bufanda|scarf/i;
+// Solo filtrar para cartas BASE (auto/signed tienen precio distinto — no mezclar)
+const EBAY_BAD_NONAUTO = /autograph|\bsigned\b/i;
+// Alias para compatibilidad con código existente que usa EBAY_BAD
+const EBAY_BAD = EBAY_BAD_ALWAYS;
 // Cartas GRADEADAS (PSA/BGS/CGC en su cápsula) — valen 10-50x más que la raw sin gradear
 // Se excluyen del precio porque las cartas de los usuarios son sin gradear por defecto
 const GRADED_PAT = /\bpsa\s*\d|\bbgs\s*\d|\bcgc\s*\d|\bsgc\s*\d|beckett\s*\d|\bpsa\s*(gem|mint|nm|ex|vg)|\bslabbed\b|\bgraded\b/i;
@@ -1422,9 +1474,14 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang, onPriceUpda
       const data = await r.json();
       const lastName=(card.player||"").split(" ").slice(-1)[0].toLowerCase();
       const prices=(data.results||[])
-        .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
-          (isAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
-          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+        .filter(it=>{
+          if(!it.price) return false;
+          if(EBAY_BAD_ALWAYS.test(it.title||"")) return false;
+          if(!isAuto&&EBAY_BAD_NONAUTO.test(it.title||"")) return false;
+          if(!GRADED_PAT.test(it.title||"")) {} else return false; // filtrar gradeadas
+          if(lastName.length>=3&&!(it.title||"").toLowerCase().includes(lastName)) return false;
+          return true;
+        })
         .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
       const floor=priceFloor(card);
       if(prices.length>=1){
@@ -1656,7 +1713,8 @@ function GradeSheet({lang,setLang,userId,isPremium,onPaywall,gate,tally}) {
     const compressed = await compressImage(file);
     const d = compressed || await toDataURL(file);
     setDurl(d);setPh("grading");
-    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");tally && tally("grade");}
+    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");tally && tally("grade");
+      if(user?.id&&user?.token) supa.trackEvent(user.id,user.token,{type:'grade'});}
     catch(e){setErr(e.message||"Error");setPh("error");}
   },[lang,gate,tally]);
 
@@ -2282,6 +2340,8 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
   const go = async () => {
     const query=q.trim(); if(!query) return;
     tally && tally("search");
+    // Tracking búsqueda (solo usuarios registrados)
+    if(user?.id&&user?.token) supa.trackEvent(user.id,user.token,{type:'search',query});
     setSt("loading"); setCards([]);
     // 1) Catálogo interno (instantáneo)
     const local = searchCards(query);
@@ -2411,6 +2471,10 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
       setCard(c);
       incrementScan(userId);
       tally && tally("scan");
+      // Tracking: escaneo completado
+      if(user?.id && user?.token) {
+        supa.trackEvent(user.id, user.token, {type:'scan', player:c.player, manufacturer:c.manufacturer, collection:c.collection, rarity:c.rarity});
+      }
       setPh("back_prompt"); // Siempre pedir el reverso antes de buscar precio
     }catch(e){setErr(e.message==="NO_CARD"?(isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card."):(isES?"No pude identificarla. Prueba con más luz.":"Couldn't identify it. Try better lighting."));setPh("error");}
   },[lang,gate,tally]);
@@ -2973,16 +3037,18 @@ export default function CardGoal() {
   },[user]);
 
   const addCard = useCallback(async card => {
-    if(!gate("save")) return;                   // invitado: máx 2, luego registro
+    if(!gate("save")) return;
     const uid = card._uid||`uid_${Date.now()}`;
     const newCard = {...card, _uid:uid};
     setCol(prev=>[...prev,newCard]);
     setAdded(prev=>new Set([...prev,uid]));
-    if(user?.token && user?.id) {               // registrado: guardar en la nube
+    if(user?.token && user?.id) {
       try {
         const res = await supa.saveCard(newCard, user.token, user.id);
         if(res && res[0]?.id) setCol(prev=>prev.map(c=>c._uid===uid?{...c,_dbId:res[0].id}:c));
       } catch(e) { console.error('saveCard error:', e); }
+      // Tracking: carta añadida a colección
+      supa.trackEvent(user.id, user.token, {type:'add_card', player:card.player, manufacturer:card.manufacturer, collection:card.collection, rarity:card.rarity, priceEur:card.priceEur});
     }
     tally("save");
   },[user, gate, tally]);
@@ -2993,6 +3059,8 @@ export default function CardGoal() {
     setAdded(prev=>{ const n=new Set(prev); n.delete(uid); return n; });
     if(user?.token && card?._dbId) {
       try { await supa.deleteCard(card._dbId, user.token); } catch {}
+      // Tracking: carta eliminada
+      supa.trackEvent(user.id, user.token, {type:'remove_card', player:card.player});
     }
   },[user,col]);
 
@@ -3001,36 +3069,39 @@ export default function CardGoal() {
   // Actualiza el precio de una carta concreta desde eBay y guarda en Supabase
   const handleRefreshCard = useCallback(async (card) => {
     try {
-      const isAuto = /auto/i.test(card.rarity||"");
-      const serial = card.serialNumber&&String(card.serialNumber)!=="null"?card.serialNumber:null;
-      const q = [card.player,
+      const isAuto   = /auto/i.test(card.rarity||"");
+      const isGraded = /\bpsa\b|\bbgs\b|\bsgc\b|\bcgc\b/i.test(card.rarity||"");
+      const serial   = card.serialNumber&&String(card.serialNumber)!=="null"?card.serialNumber:null;
+      const searchQ  = [
+        card.player,
         card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
         card.collection&&card.collection!=="?"?card.collection:"",
+        card.cardNumber&&card.cardNumber!=="null"?card.cardNumber:"",
         card.season&&card.season!=="?"?card.season:"",
         isAuto?"auto":"", serial||""
       ].filter(Boolean).join(" ").trim();
 
-      const r = await fetch(`/api/ebay?q=${encodeURIComponent(q)}`);
+      const r = await fetch(`/api/ebay?q=${encodeURIComponent(searchQ)}`);
       if(!r.ok) return;
       const data = await r.json();
       const lastName=(card.player||"").split(" ").slice(-1)[0].toLowerCase();
+
       const prices = (data.results||[])
-        .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
-          (isAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
-          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
+        .filter(it=>{
+          if(!it.price) return false;
+          if(EBAY_BAD_ALWAYS.test(it.title||"")) return false;
+          if(!isAuto&&EBAY_BAD_NONAUTO.test(it.title||"")) return false;
+          if(!isGraded&&GRADED_PAT.test(it.title||"")) return false;
+          if(lastName.length>=3&&!(it.title||"").toLowerCase().includes(lastName)) return false;
+          return true;
+        })
         .map(it=>parseEbayPrice(it.price))
         .filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
 
       if(!prices.length) return;
       const floor  = priceFloor(card);
       const median = Math.max(prices[Math.floor(prices.length/2)], floor);
-
-      // PROTECCIÓN CRÍTICA: nunca bajar más del 60% del precio actual
-      const existing = card.priceEur;
-      if(existing && existing > 20 && median < existing * 0.4) {
-        console.warn(`Rejected: ${card.player} ${existing}€ → ${median}€ (drop >60%)`);
-        return;
-      }
+      if(card.priceEur&&card.priceEur>20&&median<card.priceEur*0.4) return; // protección caída
       const np = {priceEur:median, priceMin:Math.max(prices[0],floor),
                   pricePrem:prices[prices.length-1],
                   priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`};
