@@ -982,18 +982,23 @@ If nothing special found: {"serialNumber":null,"catalogNumber":null,"hasAuto":fa
 }
 
 const SCAN_P = [
-`You are an expert football trading card identifier. Examine this image carefully.
-Look for: player name, team, manufacturer (Panini/Topps/Upper Deck/Adrenalyn XL etc), collection name, season, ANY serial number stamped on the card (like "14/25" or "5/5"), any card catalog number (#UCALY, A72, etc), and whether it has an on-card autograph.
-Return ONLY valid JSON — no text before or after:
-{"player":"Full Name","team":"Team","season":"2023-24","manufacturer":"Panini","collection":"UEFA Champions League","cardNumber":null,"serialNumber":null,"rarity":"Base","condition":"Near Mint","confidence":0.9}
-Rules: if you see X/Y stamped → serialNumber="/Y" and update rarity to "Numbered /Y". If autograph present → rarity="Auto". If PSA/BGS slab visible → rarity includes "PSA". Card number like #UCALY → cardNumber="#UCALY". If not a football card → {"player":"NO_CARD","confidence":0}`,
+`Expert football trading card identifier. Look at this image and identify the card.
+Return ONLY this JSON with no extra text:
+{"player":"Full Name","team":"FC Barcelona","season":"2023-24","manufacturer":"Panini","collection":"Adrenalyn XL","cardNumber":null,"serialNumber":null,"rarity":"Base","condition":"Near Mint","confidence":0.9}
 
-`Identify this football card. Return ONLY JSON:
-{"player":"name","team":"team","manufacturer":"brand","collection":"set name","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"year","condition":"NM","confidence":0.7}
-If stamped serial X/Y → serialNumber="/Y". If autograph → rarity "Auto". Not a card → {"player":"NO_CARD","confidence":0}`,
+Important rules:
+- serialNumber: if you see a stamped number like "14/25" → set to "/25", if "5/5" → "/5", else null
+- rarity: "Base", "Rookie", "Auto", "Numbered /25", "Auto /5", "PSA 9", etc.
+- cardNumber: if you see a code like #UCALY or A72 → set it, else null
+- confidence: 0.0 to 1.0 based on how clear the image is
+- If this is NOT a football card → {"player":"NO_CARD","confidence":0}`,
 
-`Football card identification. Return ONLY JSON:
-{"player":"name","team":"team","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.4}`
+`Identify this football card. Return ONLY JSON, nothing else:
+{"player":"name","team":"club","season":"year","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","condition":"NM","confidence":0.7}
+Serial number stamped X/Y → serialNumber="/Y". Autograph → rarity "Auto". Not a card → {"player":"NO_CARD","confidence":0}`,
+
+`Football card. JSON only:
+{"player":"name","team":"club","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.4}`
 ];
 
 async function scanCard(b64, mime) {
@@ -2473,7 +2478,14 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
         supa.trackEvent(user.id, user.token, {type:'scan', player:c.player, manufacturer:c.manufacturer, collection:c.collection, rarity:c.rarity});
       }
       setPh("back_prompt"); // Siempre pedir el reverso antes de buscar precio
-    }catch(e){setErr(e.message==="NO_CARD"?(isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card."):(isES?"No pude identificarla. Prueba con más luz.":"Couldn't identify it. Try better lighting."));setPh("error");}
+    }catch(e){
+      const msg = e.message==="NO_CARD"
+        ? (isES?"No parece ser una carta de fútbol.":"Doesn't look like a football card.")
+        : e.message==="JSON_FAIL"||e.message==="NO_PLAYER"
+          ? (isES?"No pude leer la carta. Prueba con mejor iluminación y más cerca.":"Couldn't read card. Try better lighting.")
+          : `Error: ${e.message}`;
+      setErr(msg);setPh("error");
+    }
   },[lang,gate,tally]);
 
   // Procesa el reverso y luego busca el precio
