@@ -982,21 +982,18 @@ If nothing special found: {"serialNumber":null,"catalogNumber":null,"hasAuto":fa
 }
 
 const SCAN_P = [
-`Expert football card identifier. Look carefully for:
-1) Serial/print-run number stamped on card (e.g. "5/5", "24/99" — usually bottom corner, gold-foil stamped)
-2) Card catalog number (e.g. "#UCALY", "A72", "#MB-01" — usually small text on front or back)
-3) Set/subset name (e.g. "Ultimate Stage", "Balón Oro", "Mega Crack")
-Return ONLY valid JSON:
-{"player":"Full name","team":"Club","season":"2023-24","manufacturer":"Panini/Topps/Upper Deck","collection":"Set name","cardNumber":"#UCALY or null","serialNumber":"/5 or null","rarity":"Auto /5 or Base","condition":"Near Mint","confidence":0.9}
-Rules: serial X/Y stamped → serialNumber="/Y". Auto → rarity="Auto". PSA slab visible → add "PSA" to rarity. Not a card → {"player":"NO_CARD","confidence":0}`,
+`You are an expert football trading card identifier. Examine this image carefully.
+Look for: player name, team, manufacturer (Panini/Topps/Upper Deck/Adrenalyn XL etc), collection name, season, ANY serial number stamped on the card (like "14/25" or "5/5"), any card catalog number (#UCALY, A72, etc), and whether it has an on-card autograph.
+Return ONLY valid JSON — no text before or after:
+{"player":"Full Name","team":"Team","season":"2023-24","manufacturer":"Panini","collection":"UEFA Champions League","cardNumber":null,"serialNumber":null,"rarity":"Base","condition":"Near Mint","confidence":0.9}
+Rules: if you see X/Y stamped → serialNumber="/Y" and update rarity to "Numbered /Y". If autograph present → rarity="Auto". If PSA/BGS slab visible → rarity includes "PSA". Card number like #UCALY → cardNumber="#UCALY". If not a football card → {"player":"NO_CARD","confidence":0}`,
 
-`Identify football card. Look for: stamped serial (X/Y), card number (#CODE), set name.
-Return ONLY JSON:
-{"player":"name","team":"team","manufacturer":"brand","collection":"set","cardNumber":"#CODE or null","serialNumber":"/99 or null","rarity":"Numbered /99 or Base or Auto","season":"year","condition":"NM","confidence":0.7}
-Not a card → {"player":"NO_CARD","confidence":0}`,
+`Identify this football card. Return ONLY JSON:
+{"player":"name","team":"team","manufacturer":"brand","collection":"set name","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"year","condition":"NM","confidence":0.7}
+If stamped serial X/Y → serialNumber="/Y". If autograph → rarity "Auto". Not a card → {"player":"NO_CARD","confidence":0}`,
 
-`Football card JSON. Find serial number and card number if visible:
-{"player":"name","team":"team","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.5}`
+`Football card identification. Return ONLY JSON:
+{"player":"name","team":"team","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.4}`
 ];
 
 async function scanCard(b64, mime) {
