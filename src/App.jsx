@@ -2915,28 +2915,6 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-
-  // Version check — solo cuando el usuario vuelve a la app, nunca durante el uso activo
-  useEffect(()=>{
-    const check = async () => {
-      if(document.hidden) return; // no comprobar si la pantalla está oculta
-      try {
-        const r = await fetch('/api/version', {cache:'no-store'});
-        if(!r.ok) return;
-        const {version} = await r.json();
-        if(!version) return;
-        const saved = localStorage.getItem('cg_app_version');
-        if(!saved){ localStorage.setItem('cg_app_version', version); return; }
-        if(saved !== version){
-          localStorage.setItem('cg_app_version', version);
-          setShowUpdateModal(true);
-        }
-      } catch {}
-    };
-    document.addEventListener('visibilitychange', check);
-    return () => document.removeEventListener('visibilitychange', check);
-  },[]);
 
 
   // Analytics: registra cada sección como una "página" en Google Analytics
@@ -3281,9 +3259,6 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
         </div>
       </div>
 
-
-      {/* Modal nueva versión — solo aparece cuando el usuario vuelve a la app */}
-      {showUpdateModal&&<UpdateModal onClose={()=>setShowUpdateModal(false)}/>}
 
       {/* Main content — full width */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
