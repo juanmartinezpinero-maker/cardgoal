@@ -2486,6 +2486,8 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
 
 /* SCANNER */
 function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
+  // DIAGNOSTICO v14-CLEAN - borrar después
+  console.log("Scanner v14-CLEAN cargado correctamente");
   const [ph,setPh]=useState("idle");
   const [durl,setDurl]=useState(null);
   const [card,setCard]=useState(null);
