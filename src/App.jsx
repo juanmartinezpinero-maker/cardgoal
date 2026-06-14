@@ -1706,8 +1706,7 @@ function GradeSheet({lang,setLang,userId,isPremium,onPaywall,gate,tally}) {
     const compressed = await compressImage(file);
     const d = compressed || await toDataURL(file);
     setDurl(d);setPh("grading");
-    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");tally && tally("grade");
-      if(user?.id&&user?.token) supa.trackEvent(user.id,user.token,{type:'grade'});}
+    try{const g=await gradeCard(d.split(",")[1],"image/jpeg",lang);setRes(g);setPh("result");tally && tally("grade");}
     catch(e){setErr(e.message||"Error");setPh("error");}
   },[lang,gate,tally]);
 
@@ -1911,6 +1910,56 @@ function TipModal({ lang, onClose }){
 }
 
 /* Colección cuando el usuario aún no tiene cuenta — invita a registrarse */
+function UpdateModal({onClose}) {
+  const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const steps = isIOS ? [
+    ["1","Mantén pulsado el icono de CardGoal"],
+    ["2","Toca «Eliminar app» → «Eliminar»"],
+    ["3","Abre Safari y ve a cardgoal.es"],
+    ["4","Toca Compartir → «Añadir a inicio»"],
+  ] : isAndroid ? [
+    ["1","Cierra la app completamente"],
+    ["2","Abre Chrome y ve a cardgoal.es"],
+    ["3","Toca los 3 puntos → «Añadir a pantalla inicio»"],
+    ["4","Confirma y ya tienes la versión nueva"],
+  ] : [
+    ["1","Cierra la app y vuelve a abrirla"],
+    ["2","O pulsa «Actualizar ahora» para recargar"],
+  ];
+  const platform = isIOS?"📱 iPhone":isAndroid?"🤖 Android":"💻 Navegador";
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:C.bg2,border:`1px solid ${C.accent}`,borderRadius:20,padding:24,maxWidth:360,width:"100%"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:40,marginBottom:8}}>✨</div>
+          <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>Nueva versión disponible</div>
+          <div style={{fontSize:13,color:C.sub,marginTop:6}}>CardGoal ha sido actualizado</div>
+        </div>
+        <div style={{background:C.bg3,borderRadius:14,padding:14,marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:10}}>{platform} — cómo actualizar:</div>
+          {steps.map(([n,txt])=>(
+            <div key={n} style={{display:"flex",gap:10,alignItems:"center",marginBottom:8}}>
+              <div style={{width:22,height:22,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style={{fontSize:11,fontWeight:800,color:"#000"}}>{n}</span>
+              </div>
+              <span style={{fontSize:12,color:C.text}}>{txt}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={()=>window.location.reload()}
+          style={{width:"100%",padding:"13px",background:C.accent,border:"none",borderRadius:12,fontFamily:FD,fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",marginBottom:8}}>
+          🔄 Actualizar ahora
+        </button>
+        <button onClick={onClose}
+          style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function GuestCollectionCTA({ lang, onRegister }){
   const isES = lang==="es";
   return (
@@ -2333,8 +2382,6 @@ function Search({onAdd, addedIds, onTap, lang, tally}) {
   const go = async () => {
     const query=q.trim(); if(!query) return;
     tally && tally("search");
-    // Tracking búsqueda (solo usuarios registrados)
-    if(user?.id&&user?.token) supa.trackEvent(user.id,user.token,{type:'search',query});
     setSt("loading"); setCards([]);
     // 1) Catálogo interno (instantáneo)
     const local = searchCards(query);
@@ -3246,56 +3293,7 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
       </div>
 
       {/* Modal de nueva versión — instrucciones para iOS y Android */}
-      {(showUpdateModal||swUpdate)&&(()=>{
-        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        const iosSteps = [
-          ["1","Mantén pulsado el icono de CardGoal"],
-          ["2","Toca «Eliminar app» → «Eliminar»"],
-          ["3","Abre Safari y ve a cardgoal.es"],
-          ["4","Toca Compartir → «Añadir a inicio»"],
-        ];
-        const androidSteps = [
-          ["1","Cierra la app completamente"],
-          ["2","Abre Chrome y ve a cardgoal.es"],
-          ["3","Toca los 3 puntos → «Añadir a pantalla inicio»"],
-          ["4","Confirma y ya tienes la versión nueva"],
-        ];
-        const steps = isIOS ? iosSteps : isAndroid ? androidSteps : iosSteps;
-        const platform = isIOS ? "📱 iPhone" : isAndroid ? "🤖 Android" : "📱 Móvil";
-        return(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-            <div style={{background:C.bg2,border:`1px solid ${C.accent}`,borderRadius:20,padding:24,maxWidth:360,width:"100%",boxShadow:`0 0 40px ${C.accent}44`}}>
-              <div style={{textAlign:"center",marginBottom:16}}>
-                <div style={{fontSize:40,marginBottom:8}}>✨</div>
-                <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>Nueva versión disponible</div>
-                <div style={{fontSize:13,color:C.sub,marginTop:6}}>CardGoal ha sido actualizado con mejoras y nuevas funciones</div>
-              </div>
-
-              <div style={{background:C.bg3,borderRadius:14,padding:14,marginBottom:16}}>
-                <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:10}}>{platform} — cómo actualizar:</div>
-                {steps.map(([n,t])=>(
-                  <div key={n} style={{display:"flex",gap:10,alignItems:"center",marginBottom:8}}>
-                    <div style={{width:22,height:22,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <span style={{fontSize:11,fontWeight:800,color:"#000"}}>{n}</span>
-                    </div>
-                    <span style={{fontSize:12,color:C.text}}>{t}</span>
-                  </div>
-                ))}
-              </div>
-
-              <button onClick={()=>window.location.reload()}
-                style={{width:"100%",padding:"13px",background:C.accent,border:"none",borderRadius:12,fontFamily:FD,fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",marginBottom:8}}>
-                🔄 Actualizar ahora
-              </button>
-              <button onClick={()=>setShowUpdateModal(false)}
-                style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
-                Cerrar
-              </button>
-            </div>
-          </div>
-        );
-      })()}
+      {(showUpdateModal||swUpdate)&&<UpdateModal onClose={()=>setShowUpdateModal(false)}/>}
 
       {/* Main content — full width */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
