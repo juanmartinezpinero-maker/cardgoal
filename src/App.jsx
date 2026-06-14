@@ -2701,76 +2701,21 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
             <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,boxShadow:C.shadow}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                 <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>
-                  {price?.soldCount?(isES?"Precio de venta real":"Real sold price"):price?.isEstimate?(isES?"Estimación orientativa":"Estimate"):(isES?"Anuncio activo eBay":"eBay active listing")}
+                  {price?.isEstimate?(isES?"Estimación orientativa":"Estimate"):(isES?"Precio de mercado":"Market price")}
                 </div>
-                {price?.soldCount
-                  ? <span style={{fontSize:10,fontWeight:700,color:"#0064D2",background:"#0064D215",padding:"2px 8px",borderRadius:6,border:"1px solid #0064D230"}}>📊 {price.soldCount} ventas cerradas</span>
-                  : price?.isEstimate
-                    ? <span style={{fontSize:10,fontWeight:600,color:"#f59e0b"}}>⚡ IA estimate</span>
-                    : <span style={{fontSize:10,fontWeight:600,color:C.accent}}>🛒 Precio pedido · verifica en eBay</span>}
+                {price?.isEstimate
+                  ? <span style={{fontSize:10,fontWeight:600,color:"#f59e0b"}}>⚡ IA estimate</span>
+                  : <span style={{fontSize:10,fontWeight:600,color:C.accent}}>🛒 {isES?"Verifica en eBay":"Check on eBay"}</span>}
               </div>
               <div style={{fontFamily:FD,fontSize:36,fontWeight:800,color:C.text,margin:"2px 0 4px"}}>{eur(p)}</div>
-              {price?.lastSoldDays!=null&&<div style={{fontSize:10,color:C.sub}}>
-                ✅ Última venta hace <b>{price.lastSoldDays}</b> {price.lastSoldDays===1?"día":"días"}
-              </div>}
-              {!price?.soldCount&&!price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
-                {isES?"Precio que pide el vendedor, no precio vendido":"Seller asking price, not sold price"}
-              </div>}
-              {/* Precios por plataforma */}
-              {(price?.priceEbay||price?.priceWalla)&&<div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                {price.priceEbay&&<span style={{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 10px",color:C.sub}}>
-                  🌍 eBay: <b style={{color:C.text}}>{eur(price.priceEbay)}</b>
-                </span>}
-
-              </div>}
               {price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
                 {isES?"Sin datos en eBay — estimación por rareza":"No eBay data — rarity estimate"}
               </div>}
             </div>
-
-            {/* Botón actualizar precio — busca en eBay con query específica */}
-            {!ebayOffer&&(
-              <button onClick={handleRefreshPrice} disabled={refreshing}
-                style={{width:"100%",padding:"11px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:600,color:refreshing?C.sub:C.accent,cursor:refreshing?"default":"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                {refreshing?"🔍 Buscando en eBay...":"🔄 "+(isES?"Actualizar precio desde eBay":"Refresh price from eBay")}
-              </button>
-            )}
-
-            {/* Oferta de eBay — el usuario decide si aplicar */}
-            {ebayOffer&&(
-              <div style={{background:C.bg3,border:`1px solid ${C.accent}44`,borderRadius:14,padding:14,marginBottom:10}}>
-                {ebayOffer.count>0?(
-                  <>
-                    <div style={{fontSize:11,color:C.sub,marginBottom:4}}>
-                      eBay muestra <b style={{color:C.text}}>{ebayOffer.count} anuncio{ebayOffer.count>1?"s":""}</b> entre {eur(ebayOffer.min)} y {eur(ebayOffer.max)}
-                    </div>
-                    <div style={{fontFamily:FD,fontSize:24,fontWeight:800,color:C.accent,margin:"4px 0 8px"}}>
-                      {isES?"Precio medio":"Median"}: {eur(ebayOffer.median)}
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button onClick={applyEbayPrice} style={{flex:1,padding:"10px",background:C.accent,border:"none",borderRadius:10,fontFamily:FD,fontWeight:700,color:"#fff",cursor:"pointer"}}>
-                        ✓ Aplicar {eur(ebayOffer.median)}
-                      </button>
-                      <button onClick={()=>setEbayOffer(null)} style={{flex:1,padding:"10px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,fontFamily:FD,fontWeight:600,color:C.sub,cursor:"pointer"}}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </>
-                ):(
-                  <div style={{fontSize:12,color:C.sub,textAlign:"center"}}>
-                    {isES?"No se encontraron anuncios específicos en eBay para esta carta.":"No specific eBay listings found for this card."}
-                    <button onClick={()=>setEbayOffer(null)} style={{display:"block",margin:"8px auto 0",padding:"6px 16px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,color:C.sub,cursor:"pointer",fontSize:11}}>Cerrar</button>
-                  </div>
-                )}
-              </div>
-            )}
             {num(price?.priceMin)!=null&&<div style={{display:"flex",gap:8,marginBottom:12}}>
               <PriceTag value={price.priceMin} label={isES?"Mínimo":"Low"}/>
               <PriceTag value={p} label={isES?"Mediana":"Median"} highlight/>
               <PriceTag value={price.pricePrem} label={isES?"Máximo":"High"}/>
-            </div>}
-            {price?.soldCount&&<div style={{fontSize:10,color:C.sub,marginBottom:12,textAlign:"center"}}>
-              Rango basado en {price.soldCount} ventas reales · Carta sin gradear (raw)
             </div>}
           </>:<div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,textAlign:"center",boxShadow:C.shadow}}>
             <div style={{fontSize:13,color:C.sub}}>{isES?"No encontré precio de mercado.":"No market price found."}</div>
