@@ -969,13 +969,19 @@ async function scanCardBack(b64, mime, frontCard) {
   const raw = await callAI([{role:"user",content:[
     {type:"image",source:{type:"base64",media_type:mime,data:b64}},
     {type:"text",text:`This is the BACK of a trading card. Front identified as: ${frontCard.player||"?"} ${frontCard.manufacturer||""} ${frontCard.collection||""}.
-Look carefully for:
-1. Serial/print run number stamped in foil or ink (e.g. "14/25", "005/099", "/10") — check corners and bottom edge
-2. Card catalog number (e.g. "#157", "CL-14")
-3. Autograph/signature presence (ink signature or sticker)
+
+CRITICAL DISTINCTION — serial number vs stats:
+- SERIAL/PRINT RUN: a STAMPED or FOIL number showing total print run, e.g. "14/25" means card #14 of only 25 made. Usually bottom corner, isolated, often gold/silver foil. This is RARE.
+- PLAYER STATS: numbers inside a stats table/grid (PACE 85, SHOOT 5/5, etc). These are NOT serial numbers. IGNORE them.
+- If you see numbers like "5/5", "16/20", "85/100" inside a stats section → these are stats, NOT serial numbers → serialNumber: null
+
+Look for:
+1. Serial/print run: ONLY if stamped/foil number isolated at edge or corner, NOT inside a stats grid
+2. Autograph/signature: actual ink signature or signed sticker on card
+
 Return ONLY valid JSON:
-{"serialNumber":"14/25","catalogNumber":"157","hasAuto":true,"rarity":"Auto Numbered /25"}
-If nothing special found: {"serialNumber":null,"catalogNumber":null,"hasAuto":false}`}
+{"serialNumber":"/25","hasAuto":true}
+If no stamped serial number found: {"serialNumber":null,"hasAuto":false}`}
   ]}]);
   return jparse(raw);
 }
@@ -2498,6 +2504,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   const [backDone,setBackDone]=useState(false);
   const fileRef=useRef();
   const backRef=useRef();
+  const galleryRef=useRef();
   const isES=lang==="es";
   const reset=()=>{setPh("idle");setDurl(null);setCard(null);setPrice(null);setErr("");setAdded(false);setBackDone(false);setBackScanning(false);if(fileRef.current)fileRef.current.value="";if(backRef.current)backRef.current.value="";};
   const process=useCallback(async file=>{
@@ -2618,8 +2625,12 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
   // Pantalla intermedia: cara delantera identificada → pedir reverso (OBLIGATORIO)
   if(ph==="back_prompt"&&card)return(
     <div style={{flex:1,display:"flex",flexDirection:"column",background:C.bg}}>
+      {/* Input cámara */}
       <input ref={backRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
         onChange={e=>{ const f=e.target.files?.[0]; if(f) processBack(f); if(backRef.current) backRef.current.value=""; }}/>
+      {/* Input galería */}
+      <input ref={galleryRef} type="file" accept="image/*" style={{display:"none"}}
+        onChange={e=>{ const f=e.target.files?.[0]; if(f) processBack(f); if(galleryRef.current) galleryRef.current.value=""; }}/>
       {/* Confirmación del frente */}
       <div style={{background:C.bg2,padding:"16px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${C.border}`}}>
         <div style={{width:56,height:78,borderRadius:8,overflow:"hidden",border:`2px solid ${C.accent}`,flexShrink:0}}>
@@ -2658,9 +2669,14 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
       </div>
       {/* Botones */}
       <div style={{padding:"16px 20px 32px",display:"flex",flexDirection:"column",gap:10}}>
-        <button onClick={()=>backRef.current?.click()} style={{width:"100%",padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:16,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 16px ${C.accent}44`}}>
-          📷 {isES?"Escanear reverso":"Scan back"}
-        </button>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>backRef.current?.click()} style={{flex:1,padding:"16px",background:C.accent,border:"none",borderRadius:16,fontFamily:FD,fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 16px ${C.accent}44`}}>
+            📷 {isES?"Cámara":"Camera"}
+          </button>
+          <button onClick={()=>galleryRef.current?.click()} style={{flex:1,padding:"16px",background:C.bg3,border:`1.5px solid ${C.accent}`,borderRadius:16,fontFamily:FD,fontSize:15,fontWeight:800,color:C.accent,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            🖼️ {isES?"Galería":"Gallery"}
+          </button>
+        </div>
         <button onClick={skipBack} style={{width:"100%",padding:"12px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:14,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
           {isES?"No tiene numeración ni auto en el reverso":"No serial number or auto on back"}
         </button>
