@@ -803,7 +803,6 @@ async function fetchPrice(card, token = null) {
       card.player,
       card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
       card.collection   && card.collection!=="?"   ? card.collection   : "",
-      card.cardNumber   && card.cardNumber!=="null" ? card.cardNumber  : "",
       card.season       && card.season!=="?"        ? card.season      : "",
       isAuto ? "auto" : "",
       serial || "",
@@ -982,23 +981,15 @@ If nothing special found: {"serialNumber":null,"catalogNumber":null,"hasAuto":fa
 }
 
 const SCAN_P = [
-`Expert football trading card identifier. Look at this image and identify the card.
-Return ONLY this JSON with no extra text:
-{"player":"Full Name","team":"FC Barcelona","season":"2023-24","manufacturer":"Panini","collection":"Adrenalyn XL","cardNumber":null,"serialNumber":null,"rarity":"Base","condition":"Near Mint","confidence":0.9}
-
-Important rules:
-- serialNumber: if you see a stamped number like "14/25" → set to "/25", if "5/5" → "/5", else null
-- rarity: "Base", "Rookie", "Auto", "Numbered /25", "Auto /5", "PSA 9", etc.
-- cardNumber: if you see a code like #UCALY or A72 → set it, else null
-- confidence: 0.0 to 1.0 based on how clear the image is
-- If this is NOT a football card → {"player":"NO_CARD","confidence":0}`,
-
-`Identify this football card. Return ONLY JSON, nothing else:
-{"player":"name","team":"club","season":"year","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","condition":"NM","confidence":0.7}
-Serial number stamped X/Y → serialNumber="/Y". Autograph → rarity "Auto". Not a card → {"player":"NO_CARD","confidence":0}`,
-
-`Football card. JSON only:
-{"player":"name","team":"club","manufacturer":"brand","collection":"set","cardNumber":null,"serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.4}`
+`Expert football card identifier. IMPORTANT: look carefully for any serial/print-run number stamped on the card (e.g. "5/5", "24/99", "1/10" — usually bottom corner, often gold-foil stamped). This is CRITICAL for valuation.
+Return ONLY valid JSON:
+{"player":"Full name","team":"Club","season":"2023-24","manufacturer":"Panini/Topps/Upper Deck/Adrenalyn","collection":"Set name","serialNumber":"/5","rarity":"Numbered /5","condition":"Near Mint","confidence":0.9}
+Rules: if you see X/Y stamped → serialNumber="/Y", rarity="Numbered /Y". If Auto → rarity="Auto /Y". If Patch/Relic → rarity="Patch Auto /Y". If no number → serialNumber=null, rarity="Base/Silver/Gold/Rookie/Refractor" as appropriate.
+Not a card → {"player":"NO_CARD","confidence":0}`,
+`Identify football card. Look for stamped serial number (X/Y format). Return ONLY JSON:
+{"player":"name","team":"team","manufacturer":"brand","collection":"set","serialNumber":null,"rarity":"Base","season":"year","condition":"NM","confidence":0.7}
+Not a card → {"player":"NO_CARD","confidence":0}`,
+`Football card JSON: {"player":"name","team":"team","manufacturer":"brand","collection":"set","serialNumber":null,"rarity":"Base","season":"?","condition":"NM","confidence":0.5}`
 ];
 
 async function scanCard(b64, mime) {
@@ -2506,13 +2497,13 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
       }
       setBackDone(true);
       setPh("pricing");
-      let p=null;try{p=await fetchPrice(finalCard, user?.token);}catch{}
+      let p=null;try{p=await fetchPrice(finalCard);}catch{}
       setPrice(p);setPh("result");
     }catch(e){
       console.error("back scan error",e);
       // Si falla el reverso, seguimos con los datos del frente
       setPh("pricing");
-      let p=null;try{p=await fetchPrice(card, user?.token);}catch{}
+      let p=null;try{p=await fetchPrice(card);}catch{}
       setPrice(p);setPh("result");
     }
   },[card]);
@@ -2521,7 +2512,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
     // Sin numeración en el reverso — busca precio solo con datos del frente
     setBackDone(true);
     setPh("pricing");
-    let p=null;try{p=await fetchPrice(card, user?.token);}catch{}
+    let p=null;try{p=await fetchPrice(card);}catch{}
     setPrice(p);setPh("result");
   },[card]);
 
