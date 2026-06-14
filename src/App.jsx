@@ -112,21 +112,6 @@ const supa = {
     });
   },
 
-  // Guarda el precio de una carta en Supabase (persistente entre sesiones)
-  async updateCardPrice(id, token, price) {
-    if(!id || !token) return;
-    await fetch(`${SUPA_URL}/rest/v1/collections?id=eq.${id}`, {
-      method:"PATCH",
-      headers:{...this.headers, "Authorization":`Bearer ${token}`, "Prefer":"return=minimal"},
-      body: JSON.stringify({
-        price_eur:   price.priceEur   || null,
-        price_min:   price.priceMin   || null,
-        price_prem:  price.pricePrem  || null,
-        price_source: price.priceSource || null,
-      })
-    });
-  },
-
   async refreshToken(refreshToken) {
     const r = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`, {
       method:"POST",
@@ -710,37 +695,7 @@ function parseEbayPrice(priceStr) {
   return Math.round(n * 100) / 100;
 }
 
-// Precio MÍNIMO garantizado según rareza — nunca puede bajar de aquí
-function priceFloor(card) {
-  const serial = card.serialNumber && String(card.serialNumber)!=="null" ? String(card.serialNumber) : null;
-  if(serial) {
-    // Acepta "/5", "5/50", "05/50", "5" — cualquier formato de numeración
-    const m = serial.match(/\/(\d+)/) ||   // "/5" o "14/25" → coge el denominador
-              serial.match(/^(\d+)\//)  ||   // "5/" → coge el numerador
-              serial.match(/^(\d+)$/);        // "5" solo → asume que es el total
-    const n = m ? parseInt(m[1]) : null;
-    if(n && n > 0) {
-      if(n <= 1)   return 500;
-      if(n <= 5)   return 200;
-      if(n <= 10)  return 100;
-      if(n <= 25)  return 50;
-      if(n <= 50)  return 25;
-      if(n <= 99)  return 15;
-    }
-  }
-  if(/auto/i.test(card.rarity||"")) return 15;
-  return 0;
-}
-
-// Comprueba si un precio nuevo es aceptable vs el precio existente
-function isPriceChangeOk(newPrice, existingPrice) {
-  if(!newPrice || newPrice <= 0) return false;
-  if(!existingPrice || existingPrice <= 0) return true; // sin precio previo: siempre OK
-  if(existingPrice > 30 && newPrice < existingPrice * 0.3) return false; // caída > 70%: rechazar
-  return true;
-}
-
-async function fetchPrice(card, token = null) {
+async function fetchPrice(card) {
   const serial = card.serialNumber && String(card.serialNumber)!=="null" ? String(card.serialNumber) : null;
   const serialLabel = serial ? ` NUMERADA ${serial}` : "";
   const desc = card._ebayTitle
@@ -753,21 +708,7 @@ async function fetchPrice(card, token = null) {
   const lsCached = lsPriceGet(cacheKey);
   if (lsCached && isPriceOk(lsCached.priceEur, card)) { priceCache[cacheKey]=lsCached; return lsCached; }
 
-  const save = r => {
-    // Aplicar precio mínimo garantizado según rareza
-    const floor = priceFloor(card);
-    if(floor > 0 && r.priceEur < floor) {
-      r = {...r, priceEur: floor, priceMin: floor,
-           priceSource: (r.priceSource||"") + " (mín. rareza)"};
-    }
-    priceCache[cacheKey] = r;
-    lsPriceSet(cacheKey, r);
-    logPriceSnapshot(card, r.priceEur, r.priceSource);
-    if(card._dbId && token) {
-      supa.updateCardPrice(card._dbId, token, r).catch(()=>{});
-    }
-    return r;
-  };
+  const save = r => { priceCache[cacheKey]=r; lsPriceSet(cacheKey,r); logPriceSnapshot(card,r.priceEur,r.priceSource); return r; };
 
   // ── PASO 1: precio ya en objeto (búsqueda eBay) → instantáneo ──
   if (card._fromEbay && isPriceOk(num(card.priceEur), card)) {
@@ -775,35 +716,52 @@ async function fetchPrice(card, token = null) {
     return save({priceEur:p, priceMin:Math.round(p*.65), pricePrem:Math.round(p*1.5), priceSource:"eBay", changeWeek:0, changeMonth:0});
   }
 
-  // ── PASO 2: eBay — precios reales de mercado ──
+  // ── PASO 2: eBay real — misma API que ya funciona en búsqueda, query específica ──
   try {
+    // Query lo más específica posible con todos los datos de la carta
     const isAuto = /auto/i.test(card.rarity||"");
-    const searchQ = [card.player,
-      card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
-      card.collection&&card.collection!=="?"?card.collection:"",
-      card.season&&card.season!=="?"?card.season:"",
-      isAuto?"auto":"", serial||""
-    ].filter(Boolean).join(" ").trim();
-    const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
-    const hasAuto  = isAuto;
+    const queryParts = [
+      card.player,
+      card.manufacturer && card.manufacturer!=="?" ? card.manufacturer : "",
+      card.collection  && card.collection !=="?" ? card.collection  : "",
+      card.season      && card.season      !=="?" ? card.season      : "",
+      isAuto ? "auto" : "",
+      serial || ""
+    ].filter(Boolean);
+    const searchQ = queryParts.join(" ").trim();
 
     const r = await fetch(`/api/ebay?q=${encodeURIComponent(searchQ)}`);
     if(r.ok) {
       const data = await r.json();
-      const prices = (data?.results||[])
-        .filter(it => it.price && !GRADED_PAT.test(it.title||"") && !EBAY_BAD.test(it.title||"") &&
-          (hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||"")) &&
-          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
-        .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
-      if(prices.length>=1){
-        const median=prices[Math.floor(prices.length/2)];
-        return save({priceEur:median, priceMin:prices[0], pricePrem:prices[prices.length-1],
-          priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`, changeWeek:0, changeMonth:0});
+      const lastName = (card.player||"").split(" ").slice(-1)[0].toLowerCase();
+      const hasAuto = /auto/i.test(card.rarity||"");
+      const prices = (data.results||[])
+        .filter(it =>
+          it.price &&
+          !GRADED_PAT.test(it.title||"") &&
+          !EBAY_BAD.test(it.title||"") &&
+          // Si la carta NO tiene auto, excluir listings con auto (evita precios inflados)
+          (hasAuto || !/\bauto\b|\bautograph\b|\bfirm/i.test(it.title||"")) &&
+          (lastName.length < 3 || (it.title||"").toLowerCase().includes(lastName))
+        )
+        .map(it => parseEbayPrice(it.price))
+        .filter(p => p && isPriceOk(p, card))
+        .sort((a,b) => a-b);
+
+      if(prices.length >= 1) {
+        const median = prices[Math.floor(prices.length/2)];
+        return save({
+          priceEur: median,
+          priceMin: prices[0],
+          pricePrem: prices[prices.length-1],
+          priceSource: `eBay · ${prices.length} anuncio${prices.length>1?"s":""}`,
+          changeWeek:0, changeMonth:0
+        });
       }
     }
   } catch {}
 
-  // ── PASO 3: Sonnet solo si no hay datos de mercado ──
+  // ── PASO 3: Sonnet solo si eBay no encuentra nada ──
   try {
     const serialCtx = serial
       ? `CARTA NUMERADA ${serial} (solo ${serial.replace("/","")} copias en el mundo).`
@@ -1400,47 +1358,9 @@ function LangBtn({lang,setLang}) {
    Slides up over the phone screen.
    Fetches price on mount — separate from search results.
 ──────────────────────────────────────────────────────────────── */
-function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang, onPriceUpdate}) {
-  const isES = lang==="es";
-  const [price,setPrice]         = useState(null);
-  const [loading,setLoading]     = useState(true);
-  const [refreshing,setRefreshing] = useState(false);
-  const [ebayOffer,setEbayOffer]   = useState(null);
-
-  const handleRefreshPrice = async () => {
-    setRefreshing(true); setEbayOffer(null);
-    try {
-      const isAuto = /auto/i.test(card.rarity||"");
-      const serial = card.serialNumber&&String(card.serialNumber)!=="null"?card.serialNumber:null;
-      const q = [card.player,
-        card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
-        card.collection&&card.collection!=="?"?card.collection:"",
-        card.season&&card.season!=="?"?card.season:"",
-        isAuto?"auto":"", serial||""
-      ].filter(Boolean).join(" ").trim();
-      const r = await fetch(`/api/ebay?q=${encodeURIComponent(q)}`);
-      const data = await r.json();
-      const lastName=(card.player||"").split(" ").slice(-1)[0].toLowerCase();
-      const prices=(data.results||[])
-        .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
-          (isAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
-          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
-        .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
-      const floor=priceFloor(card);
-      if(prices.length>=1){
-        const median=Math.max(prices[Math.floor(prices.length/2)],floor);
-        setEbayOffer({count:prices.length,median,min:Math.max(prices[0],floor),max:prices[prices.length-1],q});
-      } else { setEbayOffer({count:0,q}); }
-    } catch { setEbayOffer({count:0,error:true}); }
-    setRefreshing(false);
-  };
-
-  const applyEbayPrice = () => {
-    if(!ebayOffer?.median) return;
-    const np={priceEur:ebayOffer.median,priceMin:ebayOffer.min,pricePrem:ebayOffer.max,
-      priceSource:`eBay · ${ebayOffer.count} anuncio${ebayOffer.count>1?"s":""}`};
-    setPrice(np); onPriceUpdate&&onPriceUpdate(np); setEbayOffer(null);
-  };
+function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang}) {
+  const [price,setPrice]     = useState(null);
+  const [loading,setLoading] = useState(true);
 
   const t = lang==="es" ? {
     price:"Precio de mercado", searching:"Buscando precio real…",
@@ -1471,21 +1391,14 @@ function CardSheet({card, onClose, onAdd, isAdded, onAddAlert, lang, onPriceUpda
 
   useEffect(()=>{
     let alive=true;
-    // Si la carta ya tiene precio → mostrarlo directamente, sin buscar en eBay
-    if(card.priceEur && card.priceEur > 0) {
-      setPrice({
-        priceEur: card.priceEur, priceMin: card.priceMin, pricePrem: card.pricePrem,
-        priceSource: card.priceSource || card._priceSource || "Precio guardado",
-        changeWeek: card.changeWeek, changeMonth: card.changeMonth,
-      });
-      setLoading(false);
-    } else {
-      // Sin precio → buscar en eBay automáticamente (primera vez)
-      setLoading(true);
-      fetchPrice(card)
-        .then(p=>{ if(alive && p){ setPrice(p); setLoading(false); } })
-        .catch(()=>{ if(alive) setLoading(false); });
-    }
+    // If we have an estimate, show it immediately (no loading state)
+    if(estimatedPrice) setPrice(estimatedPrice);
+    setLoading(!estimatedPrice); // only show loading if no estimate
+
+    // Always fetch real price from eBay in background
+    fetchPrice(card)
+      .then(p=>{ if(alive && p){ setPrice({...p,_isEstimate:false}); setLoading(false); } })
+      .catch(()=>{ if(alive) setLoading(false); });
     return()=>{alive=false;};
   },[card._uid]);
 
@@ -2436,13 +2349,13 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
       }
       setBackDone(true);
       setPh("pricing");
-      let p=null;try{p=await fetchPrice(finalCard, user?.token);}catch{}
+      let p=null;try{p=await fetchPrice(finalCard);}catch{}
       setPrice(p);setPh("result");
     }catch(e){
       console.error("back scan error",e);
       // Si falla el reverso, seguimos con los datos del frente
       setPh("pricing");
-      let p=null;try{p=await fetchPrice(card, user?.token);}catch{}
+      let p=null;try{p=await fetchPrice(card);}catch{}
       setPrice(p);setPh("result");
     }
   },[card]);
@@ -2451,7 +2364,7 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
     // Sin numeración en el reverso — busca precio solo con datos del frente
     setBackDone(true);
     setPh("pricing");
-    let p=null;try{p=await fetchPrice(card, user?.token);}catch{}
+    let p=null;try{p=await fetchPrice(card);}catch{}
     setPrice(p);setPh("result");
   },[card]);
 
@@ -2613,54 +2526,10 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
               {!price?.soldCount&&!price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
                 {isES?"Precio que pide el vendedor, no precio vendido":"Seller asking price, not sold price"}
               </div>}
-              {/* Precios por plataforma */}
-              {(price?.priceEbay||price?.priceWalla)&&<div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                {price.priceEbay&&<span style={{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 10px",color:C.sub}}>
-                  🌍 eBay: <b style={{color:C.text}}>{eur(price.priceEbay)}</b>
-                </span>}
-
-              </div>}
               {price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
                 {isES?"Sin datos en eBay — estimación por rareza":"No eBay data — rarity estimate"}
               </div>}
             </div>
-
-            {/* Botón actualizar precio — busca en eBay con query específica */}
-            {!ebayOffer&&(
-              <button onClick={handleRefreshPrice} disabled={refreshing}
-                style={{width:"100%",padding:"11px",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:600,color:refreshing?C.sub:C.accent,cursor:refreshing?"default":"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                {refreshing?"🔍 Buscando en eBay...":"🔄 "+(isES?"Actualizar precio desde eBay":"Refresh price from eBay")}
-              </button>
-            )}
-
-            {/* Oferta de eBay — el usuario decide si aplicar */}
-            {ebayOffer&&(
-              <div style={{background:C.bg3,border:`1px solid ${C.accent}44`,borderRadius:14,padding:14,marginBottom:10}}>
-                {ebayOffer.count>0?(
-                  <>
-                    <div style={{fontSize:11,color:C.sub,marginBottom:4}}>
-                      eBay muestra <b style={{color:C.text}}>{ebayOffer.count} anuncio{ebayOffer.count>1?"s":""}</b> entre {eur(ebayOffer.min)} y {eur(ebayOffer.max)}
-                    </div>
-                    <div style={{fontFamily:FD,fontSize:24,fontWeight:800,color:C.accent,margin:"4px 0 8px"}}>
-                      {isES?"Precio medio":"Median"}: {eur(ebayOffer.median)}
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button onClick={applyEbayPrice} style={{flex:1,padding:"10px",background:C.accent,border:"none",borderRadius:10,fontFamily:FD,fontWeight:700,color:"#fff",cursor:"pointer"}}>
-                        ✓ Aplicar {eur(ebayOffer.median)}
-                      </button>
-                      <button onClick={()=>setEbayOffer(null)} style={{flex:1,padding:"10px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,fontFamily:FD,fontWeight:600,color:C.sub,cursor:"pointer"}}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </>
-                ):(
-                  <div style={{fontSize:12,color:C.sub,textAlign:"center"}}>
-                    {isES?"No se encontraron anuncios específicos en eBay para esta carta.":"No specific eBay listings found for this card."}
-                    <button onClick={()=>setEbayOffer(null)} style={{display:"block",margin:"8px auto 0",padding:"6px 16px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,color:C.sub,cursor:"pointer",fontSize:11}}>Cerrar</button>
-                  </div>
-                )}
-              </div>
-            )}
             {num(price?.priceMin)!=null&&<div style={{display:"flex",gap:8,marginBottom:12}}>
               <PriceTag value={price.priceMin} label={isES?"Mínimo":"Low"}/>
               <PriceTag value={p} label={isES?"Mediana":"Median"} highlight/>
@@ -2687,10 +2556,8 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
 }
 
 /* COLLECTION */
-function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating, isGuest, onRegister, onRefreshCard}) {
+function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating, isGuest, onRegister}) {
   const [filt,setFilt]=useState("all");
-  const [refreshingUid, setRefreshingUid] = useState(null);
-  const [refreshedUid, setRefreshedUid]   = useState(null);
   const isES=lang==="es";
   const total=col.reduce((s,c)=>s+(num(c.priceEur)||num(c.price)||0),0);
   const filtered=col.filter(c=>{
@@ -2740,6 +2607,27 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
           </button>
         )}
 
+        {/* Update prices button — full width, premium design */}
+        {onUpdatePrices&&!isGuest&&col.length>0&&(
+          <button onClick={onUpdatePrices} disabled={isUpdating} style={{
+            width:"100%",marginTop:12,padding:"12px 16px",
+            background:isUpdating?"transparent":`linear-gradient(135deg,${C.bg3},${C.bg2})`,
+            border:`1px solid ${isUpdating?C.border:C.accent+"44"}`,
+            borderRadius:14,cursor:isUpdating?"default":"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            transition:"all .2s",boxShadow:isUpdating?"none":`0 2px 12px ${C.accent}22`
+          }}>
+            <span style={{fontSize:16}}>{isUpdating?"⏳":"🔄"}</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontFamily:FD,fontSize:12,fontWeight:700,color:isUpdating?C.hint:C.accent}}>
+                {isUpdating?(isES?"Actualizando precios...":"Updating prices..."):(isES?"Actualizar valor de tu colección":"Update your collection value")}
+              </div>
+              {!isUpdating&&<div style={{fontSize:10,color:C.hint,marginTop:1}}>
+                {isES?"Consulta los precios actuales de mercado":"Checks current market prices"}</div>}
+            </div>
+          </button>
+        )}
+
         <div style={{display:"flex",gap:6,marginTop:10}}>
           {FILTERS.map(([l,v])=>(
             <div key={v} onClick={()=>setFilt(v)} style={{padding:"5px 14px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",background:filt===v?C.accent:C.bg,color:filt===v?"#fff":C.sub,border:`1px solid ${filt===v?C.accent:C.border}`,transition:"all .15s"}}>{l}</div>
@@ -2769,24 +2657,6 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
                   style={{position:"absolute",top:6,right:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.6)",color:C.red,fontSize:14,fontWeight:800,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
                   ✕
                 </button>}
-                {onRefreshCard&&<button
-                  onClick={async (e)=>{
-                    e.stopPropagation();
-                    setRefreshingUid(card._uid);
-                    setRefreshedUid(null);
-                    await onRefreshCard(card);
-                    setRefreshingUid(null);
-                    setRefreshedUid(card._uid);
-                    setTimeout(()=>setRefreshedUid(null), 2000);
-                  }}
-                  disabled={refreshingUid===card._uid}
-                  title={isES?"Actualizar precio desde eBay":"Refresh price from eBay"}
-                  style={{position:"absolute",top:6,left:6,zIndex:5,width:26,height:26,borderRadius:"50%",border:"none",
-                    background:refreshedUid===card._uid?"rgba(0,230,118,0.9)":refreshingUid===card._uid?"rgba(0,0,0,0.4)":"rgba(0,0,0,0.6)",
-                    color:refreshedUid===card._uid?"#fff":C.accent,fontSize:13,lineHeight:1,
-                    cursor:refreshingUid===card._uid?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
-                  {refreshingUid===card._uid?"⏳":refreshedUid===card._uid?"✓":"🔄"}
-                </button>}
                 <div style={{display:"flex",justifyContent:"center",padding:"12px 10px 8px",background:`linear-gradient(180deg,${C.bg},${C.white})`}}>
                   <CardViz card={card} photo={card._thumb||null} sz="md" imgUrl={card._fromEbay?card._ebayImg:null}/>
                 </div>
@@ -2814,34 +2684,6 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
 ═══════════════════════════════════════════════════════════ */
 export default function CardGoal() {
   const [screen,setScreen] = useState("home");
-  const [swUpdate, setSwUpdate] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-
-  // Detectar SW update
-  useEffect(()=>{
-    if(!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.addEventListener('controllerchange', ()=>{ setSwUpdate(true); });
-  },[]);
-
-  // Comprobar versión en servidor — funciona en iOS aunque no haya SW
-  useEffect(()=>{
-    const check = async () => {
-      try {
-        const r = await fetch('/api/version', {cache:'no-store'});
-        if(!r.ok) return;
-        const {version} = await r.json();
-        if(!version) return;
-        const saved = localStorage.getItem('cg_app_version');
-        if(!saved){ localStorage.setItem('cg_app_version', version); }
-        else if(saved !== version){
-          setShowUpdateModal(true);
-          localStorage.setItem('cg_app_version', version);
-        }
-      } catch {}
-    };
-    const t = setTimeout(check, 3000);
-    return ()=>clearTimeout(t);
-  },[]);
   // Analytics: registra cada sección como una "página" en Google Analytics
   useEffect(()=>{
     if(typeof window==="undefined" || !window.gtag) return;
@@ -2998,138 +2840,66 @@ export default function CardGoal() {
 
   const [updatingPrices, setUpdatingPrices] = useState(false);
 
-  // Actualiza el precio de una carta concreta desde eBay y guarda en Supabase
-  const handleRefreshCard = useCallback(async (card) => {
-    try {
-      const isAuto = /auto/i.test(card.rarity||"");
-      const serial = card.serialNumber&&String(card.serialNumber)!=="null"?card.serialNumber:null;
-      const q = [card.player,
-        card.manufacturer&&card.manufacturer!=="?"?card.manufacturer:"",
-        card.collection&&card.collection!=="?"?card.collection:"",
-        card.season&&card.season!=="?"?card.season:"",
-        isAuto?"auto":"", serial||""
-      ].filter(Boolean).join(" ").trim();
-
-      const r = await fetch(`/api/ebay?q=${encodeURIComponent(q)}`);
-      if(!r.ok) return;
-      const data = await r.json();
-      const lastName=(card.player||"").split(" ").slice(-1)[0].toLowerCase();
-      const prices = (data.results||[])
-        .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
-          (isAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
-          (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
-        .map(it=>parseEbayPrice(it.price))
-        .filter(p=>p&&isPriceOk(p,card)).sort((a,b)=>a-b);
-
-      if(!prices.length) return;
-      const floor  = priceFloor(card);
-      const median = Math.max(prices[Math.floor(prices.length/2)], floor);
-
-      // PROTECCIÓN CRÍTICA: nunca bajar más del 60% del precio actual
-      const existing = card.priceEur;
-      if(existing && existing > 20 && median < existing * 0.4) {
-        console.warn(`Rejected: ${card.player} ${existing}€ → ${median}€ (drop >60%)`);
-        return;
-      }
-      const np = {priceEur:median, priceMin:Math.max(prices[0],floor),
-                  pricePrem:prices[prices.length-1],
-                  priceSource:`eBay · ${prices.length} anuncio${prices.length>1?"s":""}`};
-      setCol(prev=>prev.map(c=>c._uid===card._uid?{...c,...np}:c));
-      if(card._dbId&&user?.token) supa.updateCardPrice(card._dbId,user.token,np).catch(()=>{});
-    } catch(e){ console.error("refreshCard",e); }
-  },[user]);
-
   const handleUpdatePrices = useCallback(async () => {
     if(updatingPrices || col.length === 0) return;
     setUpdatingPrices(true);
     try {
-      const toUpdate = col.map((c,i)=>({c,i})).filter(({c})=>{
-        if(c.priceEur && c.priceEur > 0) return false; // ya tiene precio → NO TOCAR
-        return true; // sin precio → actualizar
-      });
-      if(toUpdate.length===0){ setUpdatingPrices(false); return; }
-      const updated = [...col];
-
-      // FASE 1: eBay + Wallapop en paralelo para todas las cartas
-      const marketResults = await Promise.allSettled(toUpdate.map(async ({c})=>{
-        const isAuto = /auto/i.test(c.rarity||"");
-        const q = [c.player,
-          c.manufacturer&&c.manufacturer!=="?"?c.manufacturer:"",
-          c.collection&&c.collection!=="?"?c.collection:"",
-          c.season&&c.season!=="?"?c.season:"",
-          isAuto?"auto":"",
-          c.serialNumber&&String(c.serialNumber)!=="null"?c.serialNumber:""
-        ].filter(Boolean).join(" ").trim();
-        const lastName=(c.player||"").split(" ").slice(-1)[0].toLowerCase();
-        const hasAuto=isAuto;
-        const [eR,wR]=await Promise.allSettled([
-          fetch(`/api/ebay?q=${encodeURIComponent(q)}`).then(r=>r.ok?r.json():null),
-          Promise.resolve(null),
-        ]);
-        const ePrices=((eR.status==="fulfilled"?eR.value:null)?.results||[])
-          .filter(it=>it.price&&!GRADED_PAT.test(it.title||"")&&!EBAY_BAD.test(it.title||"")&&
-            (hasAuto||!/\bauto\b|\bautograph\b/i.test(it.title||""))&&
-            (lastName.length<3||(it.title||"").toLowerCase().includes(lastName)))
-          .map(it=>parseEbayPrice(it.price)).filter(p=>p&&isPriceOk(p,c)).sort((a,b)=>a-b);
-        if(!ePrices.length) return null;
-        const median=ePrices[Math.floor(ePrices.length/2)];
-        return {priceEur:median,priceMin:ePrices[0],pricePrem:ePrices[ePrices.length-1],
-          priceSource:`eBay · ${ePrices.length} anuncios`};
-      }));
-
-      const needSonnet=[];
-      marketResults.forEach((res,n)=>{
-        const {c,i}=toUpdate[n];
-        const p=res.status==="fulfilled"?res.value:null;
-        if(p&&isPriceOk(p.priceEur,c)&&isPriceChangeOk(p.priceEur,c.priceEur)){
-          const floor=priceFloor(c);
-          const finalPrice=Math.max(p.priceEur, floor);
-          const finalResult={...p, priceEur:finalPrice, priceMin:Math.max(p.priceMin||0,floor)};
-          updated[i]={...updated[i],...finalResult};
-          const key=`${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
-          lsPriceSet(key,finalResult);
-          if(c._dbId&&user?.token) supa.updateCardPrice(c._dbId,user.token,finalResult).catch(()=>{});
-        } else { needSonnet.push(toUpdate[n]); }
+      // "Actualizar" siempre pide precios frescos — borra caché de todas las cartas
+      col.forEach(c => {
+        const key = `${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
+        lsPriceClear(key);
+        delete priceCache[key];
       });
 
-      // FASE 2: Sonnet para cartas sin datos de mercado
-      if(needSonnet.length>0){
-        const cardList=needSonnet.map(({c},n)=>{
-          const serial=c.serialNumber&&String(c.serialNumber)!=="null"?` NUMERADA ${c.serialNumber}`:"";
-          return `${n+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"}${serial} | ${c.season||"?"}`;
-        }).join("\n");
-        const raw=await callAI([{role:"user",content:
-`Experto tasador de cartas de fútbol. Valora estas ${needSonnet.length} cartas en EUR (SIN GRADEAR, raw):
+      // Una sola llamada a Sonnet con todas las cartas
+      const cardList = col.map((c, n) => {
+        const serial = c.serialNumber && String(c.serialNumber)!=="null" ? ` NUMERADA ${c.serialNumber}` : "";
+        return `${n+1}. ${c.player} | ${c.manufacturer||"?"} | ${c.collection||"?"} | ${c.rarity||"Base"}${serial} | ${c.season||"?"}`;
+      }).join("\n");
+
+      const raw = await callAI([{role:"user", content:
+`Experto tasador de cartas de fútbol coleccionables. Valora estas ${col.length} cartas en EUR (SIN GRADEAR, raw, no PSA/BGS):
 
 ${cardList}
 
-RANGOS: Base común=0.5-3€ | Base top=5-25€ | Prizm=5-60€ | Auto=20-500€ | Auto /50=100-350€ | Auto /25=150-600€ | Auto /10=300-1500€ | Auto /5=600-3000€
-Endrick/Yamal/Vinicius/Bellingham: ×2-3 sobre rangos.
-SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
-        }],false,600,"claude-sonnet-4-6");
-        try{
-          const match=(raw.replace(/\`\`\`json|\`\`\`/g,"").trim()).match(/\[\s\S]*\]/);
-          if(match){
-            const prices=JSON.parse(match[0]);
-            needSonnet.forEach(({c,i},n)=>{
-              const p=prices[n]; const np=num(p?.priceEur);
-              if(!np||!isPriceOk(np,c)||!isPriceChangeOk(np,c.priceEur)) return;
-              const floor=priceFloor(c);
-              const finalPrice=Math.max(np,floor);
-              const result={priceEur:finalPrice,priceMin:Math.max(num(p.priceMin)||Math.round(finalPrice*.65),floor),
-                pricePrem:num(p.pricePrem)||Math.round(finalPrice*1.5),priceSource:"Estimación IA"};
-              updated[i]={...updated[i],...result};
-              const key=`${c.player}|${c.manufacturer||""}|${c.collection||""}|${c.rarity||"Base"}|${c.serialNumber||""}|${c.season||""}`;
-              lsPriceSet(key,result);
-              if(c._dbId&&user?.token) supa.updateCardPrice(c._dbId,user.token,result).catch(()=>{});
-            });
-          }
-        }catch(e){console.error("Sonnet parse:",e);}
+RANGOS DE REFERENCIA:
+- Cromo base jugador común: 0.5-3€ | jugador conocido: 2-8€ | jugador top (Messi/CR7/Mbappé/Yamal/Vinicius): 5-25€
+- Prizm/Refractor/Foil: 4-15€ | jugador top: 15-60€
+- Rookie prometedor: 10-60€ | Rookie top: 30-200€
+- Auto sin numerar: 15-100€ | jugador top: 80-500€
+- Auto /99: 30-150€ | Auto /50: 80-350€ | Auto /25: 150-600€ | Auto /10: 300-1500€ | Auto /5: 600-3000€
+- Numerada sin auto: aprox. 25-30% del precio del auto equivalente
+- Vintage/clásico (antes del 2010): puede valer 2-5x más según el jugador
+- MUY IMPORTANTE — jugadores calientes en mercado actual: Endrick (Real Madrid), Lamine Yamal, Bellingham, Vinicius Jr — sus autos numerados valen ×2-4 sobre el rango base mínimo
+
+Devuelve SOLO un JSON array con exactamente ${col.length} objetos en el mismo orden:
+[{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
+      }], false, 1000, "claude-sonnet-4-6");
+
+      const updated = [...col];
+      const clean = raw.replace(/```json|```/g,"").trim();
+      const match = clean.match(/\[[\s\S]*\]/);
+      if(match) {
+        const prices = JSON.parse(match[0]);
+        col.forEach((card, i) => {
+          const p = prices[i];
+          const newPrice = num(p?.priceEur);
+          if(!newPrice || newPrice <= 0 || !isPriceOk(newPrice, card)) return;
+          const result = {
+            priceEur: newPrice,
+            priceMin: num(p.priceMin) || Math.round(newPrice * 0.65),
+            pricePrem: num(p.pricePrem) || Math.round(newPrice * 1.5),
+            priceSource: "Estimación mercado"
+          };
+          updated[i] = {...updated[i], ...result};
+          const key = `${card.player}|${card.manufacturer||""}|${card.collection||""}|${card.rarity||"Base"}|${card.serialNumber||""}|${card.season||""}`;
+          lsPriceSet(key, result);
+        });
       }
       setCol(updated);
-    } catch(e){ console.error("handleUpdatePrices:",e); }
+    } catch(e) { console.error("handleUpdatePrices:", e); }
     setUpdatingPrices(false);
-  },[col,updatingPrices,user]);
+  },[col, updatingPrices]);
 
   const addAlert = useCallback((card, targetPrice) => {
     setPriceAlerts(prev=>[...prev, {card, targetPrice, _uid:`alert_${Date.now()}`}]);
@@ -3177,58 +2947,6 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
         </div>
       </div>
 
-      {/* Modal de nueva versión — instrucciones para iOS y Android */}
-      {(showUpdateModal||swUpdate)&&(()=>{
-        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        const iosSteps = [
-          ["1","Mantén pulsado el icono de CardGoal"],
-          ["2","Toca «Eliminar app» → «Eliminar»"],
-          ["3","Abre Safari y ve a cardgoal.es"],
-          ["4","Toca Compartir → «Añadir a inicio»"],
-        ];
-        const androidSteps = [
-          ["1","Cierra la app completamente"],
-          ["2","Abre Chrome y ve a cardgoal.es"],
-          ["3","Toca los 3 puntos → «Añadir a pantalla inicio»"],
-          ["4","Confirma y ya tienes la versión nueva"],
-        ];
-        const steps = isIOS ? iosSteps : isAndroid ? androidSteps : iosSteps;
-        const platform = isIOS ? "📱 iPhone" : isAndroid ? "🤖 Android" : "📱 Móvil";
-        return(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-            <div style={{background:C.bg2,border:`1px solid ${C.accent}`,borderRadius:20,padding:24,maxWidth:360,width:"100%",boxShadow:`0 0 40px ${C.accent}44`}}>
-              <div style={{textAlign:"center",marginBottom:16}}>
-                <div style={{fontSize:40,marginBottom:8}}>✨</div>
-                <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.text}}>Nueva versión disponible</div>
-                <div style={{fontSize:13,color:C.sub,marginTop:6}}>CardGoal ha sido actualizado con mejoras y nuevas funciones</div>
-              </div>
-
-              <div style={{background:C.bg3,borderRadius:14,padding:14,marginBottom:16}}>
-                <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:10}}>{platform} — cómo actualizar:</div>
-                {steps.map(([n,t])=>(
-                  <div key={n} style={{display:"flex",gap:10,alignItems:"center",marginBottom:8}}>
-                    <div style={{width:22,height:22,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <span style={{fontSize:11,fontWeight:800,color:"#000"}}>{n}</span>
-                    </div>
-                    <span style={{fontSize:12,color:C.text}}>{t}</span>
-                  </div>
-                ))}
-              </div>
-
-              <button onClick={()=>window.location.reload()}
-                style={{width:"100%",padding:"13px",background:C.accent,border:"none",borderRadius:12,fontFamily:FD,fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",marginBottom:8}}>
-                🔄 Actualizar ahora
-              </button>
-              <button onClick={()=>setShowUpdateModal(false)}
-                style={{width:"100%",padding:"11px",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,fontFamily:FD,fontSize:13,fontWeight:600,color:C.sub,cursor:"pointer"}}>
-                Cerrar
-              </button>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Main content — full width */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",maxWidth:600,width:"100%",margin:"0 auto",background:C.bg,minHeight:"calc(100vh - 120px)"}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
@@ -3239,7 +2957,7 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
             {screen==="search"     &&<Search     onAdd={addCard} addedIds={addedIds} onTap={c=>setModal(c)} lang={lang} tally={tally}/>}
             {screen==="scanner"    &&<Scanner    onAdd={addCard} lang={lang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("scan")} gate={gate} tally={tally}/>}
             {screen==="collection" &&((user||col.length>0)
-              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)} onRefreshCard={user?handleRefreshCard:null}/>
+              ? <Collection col={col} nav={setScreen} onTap={c=>setModal(c)} onRemove={removeCard} lang={lang} onUpdatePrices={handleUpdatePrices} isUpdating={updatingPrices} isGuest={!user} onRegister={()=>setShowAuth(true)}/>
               : <GuestCollectionCTA lang={lang} onRegister={()=>setShowAuth(true)}/>)}
             {screen==="grading"    &&<GradeSheet lang={lang} setLang={setLang} userId={user?.id} isPremium={isPremium} onPaywall={()=>setPaywall("grade")} gate={gate} tally={tally}/>}
           </>
@@ -3254,11 +2972,7 @@ SOLO JSON: [{"priceEur":8,"priceMin":4,"pricePrem":20},...]`
 
         {/* CARD DETAIL SHEET */}
         {modal&&<div style={{position:"fixed",inset:0,zIndex:300,background:C.white,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto",left:"50%",transform:"translateX(-50%)",width:"100%"}}>
-          <CardSheet card={modal} onClose={()=>setModal(null)} onAdd={addCard} isAdded={addedIds.has(modal._uid)} onAddAlert={addAlert} lang={lang}
-            onPriceUpdate={(newPrice)=>{
-              if(modal?._dbId&&user?.token) supa.updateCardPrice(modal._dbId,user.token,newPrice).catch(()=>{});
-              setCol(prev=>prev.map(c=>c._uid===modal._uid?{...c,...newPrice}:c));
-            }}/>
+          <CardSheet card={modal} onClose={()=>setModal(null)} onAdd={addCard} isAdded={addedIds.has(modal._uid)} onAddAlert={addAlert} lang={lang}/>
         </div>}
       </div>
 
