@@ -1,35 +1,10 @@
 {
   "name": "CardGoal",
   "short_name": "CardGoal",
-  "description": "Tu portfolio de cromos de fútbol",
+  "description": "Valora tus cromos de futbol con IA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0D0F14",
-  "theme_color": "#0D0F14",
-  "orientation": "portrait",
-  "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "theme_color": "#00E676",
+  "orientation": "portrait"
 }
