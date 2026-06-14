@@ -1,1 +1,10 @@
-
+{
+  "name": "CardGoal",
+  "short_name": "CardGoal",
+  "description": "Valora tus cromos de futbol con IA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D0F14",
+  "theme_color": "#00E676",
+  "orientation": "portrait"
+}
