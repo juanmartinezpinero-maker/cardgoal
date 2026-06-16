@@ -2714,21 +2714,40 @@ function Scanner({onAdd, lang, userId, isPremium, onPaywall, gate, tally}) {
         </div>
         <div style={{padding:"16px"}}>
           {p!=null?<>
-            <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",marginBottom:12,boxShadow:C.shadow}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>
-                  {price?.isEstimate?(isES?"Estimación orientativa":"Estimate"):(isES?"Precio de mercado":"Market price")}
+            {/* PRECIO — borroso si no está registrado */}
+            <div style={{position:"relative",marginBottom:12}}>
+              <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",boxShadow:C.shadow,
+                           filter:!userId?"blur(5px)":"none",userSelect:!userId?"none":"auto",transition:"filter .3s"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                  <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                    {price?.isEstimate?(isES?"Estimación orientativa":"Estimate"):(isES?"Precio de mercado":"Market price")}
+                  </div>
+                  {price?.isEstimate
+                    ? <span style={{fontSize:10,fontWeight:600,color:"#f59e0b"}}>⚡ IA estimate</span>
+                    : <span style={{fontSize:10,fontWeight:600,color:C.accent}}>🛒 {isES?"Verifica en eBay":"Check on eBay"}</span>}
                 </div>
-                {price?.isEstimate
-                  ? <span style={{fontSize:10,fontWeight:600,color:"#f59e0b"}}>⚡ IA estimate</span>
-                  : <span style={{fontSize:10,fontWeight:600,color:C.accent}}>🛒 {isES?"Verifica en eBay":"Check on eBay"}</span>}
+                <div style={{fontFamily:FD,fontSize:36,fontWeight:800,color:C.text,margin:"2px 0 4px"}}>{eur(p)}</div>
+                {price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
+                  {isES?"Sin datos en eBay — estimación por rareza":"No eBay data — rarity estimate"}
+                </div>}
               </div>
-              <div style={{fontFamily:FD,fontSize:36,fontWeight:800,color:C.text,margin:"2px 0 4px"}}>{eur(p)}</div>
-              {price?.isEstimate&&<div style={{fontSize:10,color:C.sub,marginTop:2}}>
-                {isES?"Sin datos en eBay — estimación por rareza":"No eBay data — rarity estimate"}
+              {/* Overlay para no registrados */}
+              {!userId&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",
+                alignItems:"center",justifyContent:"center",gap:10,borderRadius:14,
+                background:"rgba(13,15,20,0.55)",backdropFilter:"blur(1px)"}}>
+                <div style={{fontSize:24}}>🔒</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text,textAlign:"center"}}>
+                  {isES?"Regístrate gratis para ver el precio":"Sign up free to see the price"}
+                </div>
+                <button onClick={onPaywall} style={{padding:"10px 24px",background:C.accent,border:"none",
+                  borderRadius:10,fontFamily:FD,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",
+                  boxShadow:`0 4px 14px ${C.accent}44`}}>
+                  {isES?"Ver precio gratis →":"See price free →"}
+                </button>
               </div>}
             </div>
-            {num(price?.priceMin)!=null&&<div style={{display:"flex",gap:8,marginBottom:12}}>
+            {num(price?.priceMin)!=null&&<div style={{display:"flex",gap:8,marginBottom:12,
+              filter:!userId?"blur(5px)":"none",userSelect:!userId?"none":"auto"}}>
               <PriceTag value={price.priceMin} label={isES?"Mínimo":"Low"}/>
               <PriceTag value={p} label={isES?"Mediana":"Median"} highlight/>
               <PriceTag value={price.pricePrem} label={isES?"Máximo":"High"}/>
@@ -2778,24 +2797,52 @@ function Collection({col, nav, onTap, onRemove, lang, onUpdatePrices, isUpdating
 
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:C.bg}}>
-      {/* Header */}
-      <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,flexShrink:0,padding:"14px 18px 10px"}}>
-        <div style={{fontFamily:FD,fontSize:20,fontWeight:800,color:C.white}}>{isES?"Mi Colección":"My Collection"}</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
+      {/* PORTFOLIO DASHBOARD */}
+      <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,flexShrink:0,padding:"16px 18px 14px"}}>
+        {/* Valor total */}
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14}}>
           <div>
-            <div style={{display:"flex",alignItems:"baseline",gap:8}}>
-              <span style={{fontFamily:FD,fontSize:28,fontWeight:800,color:C.accent}}>{eur(total)}</span>
-              <span style={{fontSize:13,color:C.sub}}>{col.length} {isES?"cartas":"cards"}</span>
+            <div style={{fontSize:11,color:C.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>
+              {isES?"💼 Valor de tu colección":"💼 Collection value"}
             </div>
-            <div style={{fontSize:10,color:C.sub,marginTop:2}}>
-              {isES?"Valor orientativo · precios de anuncios eBay":"Approximate value · eBay listing prices"}
+            <div style={{fontFamily:FD,fontSize:38,fontWeight:800,color:C.accent,lineHeight:1}}>
+              {total>0?eur(total):"—"}
             </div>
+            <div style={{fontSize:11,color:C.sub,marginTop:4}}>
+              {col.length} {isES?"cartas · precios orientativos eBay":"cards · estimated eBay prices"}
+            </div>
+          </div>
+          {/* Stats rápidas */}
+          <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+            {(()=>{
+              const valued = col.filter(c=>num(c.priceEur)>0);
+              const topCard = valued.sort((a,b)=>(num(b.priceEur)||0)-(num(a.priceEur)||0))[0];
+              const autos = col.filter(c=>/auto/i.test(c.rarity||"")).length;
+              const numbered = col.filter(c=>c.serialNumber&&c.serialNumber!=="null").length;
+              return <>
+                {topCard&&<div style={{background:C.bg3,border:`1px solid ${C.gold}44`,borderRadius:10,padding:"6px 10px",textAlign:"right"}}>
+                  <div style={{fontSize:9,color:C.gold,fontWeight:700,textTransform:"uppercase"}}>🏆 Top carta</div>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text}}>{topCard.player}</div>
+                  <div style={{fontSize:11,color:C.gold,fontWeight:800}}>{eur(num(topCard.priceEur))}</div>
+                </div>}
+                <div style={{display:"flex",gap:6}}>
+                  {autos>0&&<div style={{background:C.goldL,border:`1px solid ${C.gold}44`,borderRadius:8,padding:"4px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:10,fontWeight:800,color:C.gold}}>{autos}</div>
+                    <div style={{fontSize:9,color:C.gold}}>Autos</div>
+                  </div>}
+                  {numbered>0&&<div style={{background:"#7c3aed22",border:"1px solid #7c3aed44",borderRadius:8,padding:"4px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:10,fontWeight:800,color:"#a78bfa"}}>{numbered}</div>
+                    <div style={{fontSize:9,color:"#a78bfa"}}>Num.</div>
+                  </div>}
+                </div>
+              </>;
+            })()}
           </div>
         </div>
 
         {/* Aviso para invitados: regístrate para guardar de verdad */}
         {isGuest&&(
-          <button onClick={onRegister} style={{width:"100%",marginTop:12,padding:"12px 14px",background:`${C.accent}1A`,border:`1px solid ${C.accent}55`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
+          <button onClick={onRegister} style={{width:"100%",marginBottom:10,padding:"12px 14px",background:`${C.accent}1A`,border:`1px solid ${C.accent}55`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
             <span style={{fontSize:18}}>💾</span>
             <div>
               <div style={{fontFamily:FD,fontSize:12,fontWeight:800,color:C.accent}}>{isES?"Estás probando como invitado":"You're trying as a guest"}</div>
